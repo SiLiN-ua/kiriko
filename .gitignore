@@ -1,0 +1,25 @@
+# Environment & secrets
+.env
+*.session
+*.session-journal
+
+# Data
+data/history.json
+data/
+
+# Reports (contain personal data)
+static/reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

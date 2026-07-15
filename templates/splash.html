@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>霧子 KIRIKO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300&family=Cinzel:wght@400&family=Inter:wght@200;300&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body {
+      width:100%; height:100%;
+      background:#020205;
+      overflow:hidden;
+      font-family:'Courier New', monospace;
+    }
+
+    /* ── Canvas: mist lives here ── */
+    #mist { position:fixed; inset:0; z-index:1; }
+
+    /* ── Moon glow: subtle top-center radiance ── */
+    #moon {
+      position:fixed; z-index:2;
+      top:-180px; left:50%; transform:translateX(-50%);
+      width:600px; height:600px; border-radius:50%;
+      background: radial-gradient(circle,
+        rgba(200,220,255,0.13) 0%,
+        rgba(160,190,255,0.06) 40%,
+        transparent 72%);
+      opacity:0; pointer-events:none;
+    }
+
+    /* ── Main content ── */
+    #stage {
+      position:fixed; inset:0; z-index:10;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      pointer-events:none;
+    }
+
+    /* ── KIRIKO — main title container ── */
+    #kir {
+      display:flex; align-items:center; justify-content:center;
+      gap:.08em;
+      opacity:1; /* container stays visible; letters fade individually */
+    }
+
+    /* individual KIRIKO letters */
+    .kr {
+      display:inline-block;
+      font-family:'Cinzel', serif; font-weight:400;
+      color:rgba(228,240,255,.95);
+      text-shadow:
+        -4px 0 rgba(255,0,60,0.60),
+        4px 0 rgba(0,255,249,0.60),
+        0 0 28px  rgba(180,210,255,.60),
+        0 0 75px  rgba(160,200,255,.32),
+        0 0 150px rgba(140,185,255,.16);
+      letter-spacing:.10em;
+      opacity:0;
+    }
+
+    /* thin rule */
+    #rule {
+      width:0; height:1px;
+      background:linear-gradient(90deg,
+        transparent, rgba(200,218,255,.35), transparent);
+      margin:1em 0 .85em; opacity:0;
+    }
+
+    /* kanji wrapper: subtitle below */
+    #kanji-wrap {
+      display:flex; gap:.32em; align-items:center; justify-content:center;
+    }
+    .k-char {
+      font-family:'Noto Serif JP',serif; font-weight:200;
+      color:rgba(235,243,255,.95);
+      text-shadow:
+        -3px 0 rgba(255,0,60,0.55),
+        3px 0 rgba(0,255,249,0.55),
+        0 0 35px rgba(180,210,255,.65),
+        0 0 80px  rgba(160,195,255,.35),
+        0 0 150px rgba(140,185,255,.18);
+      opacity:0;
+      display:inline-block;
+    }
+
+    /* credential note */
+    #note {
+      margin-top:3.2em;
+      font-family:'Courier New',monospace; font-size:10px;
+      letter-spacing:.22em; color:rgba(160,185,255,.15);
+      opacity:0;
+    }
+
+    /* auth */
+    #auth {
+      margin-top:2.8em;
+      display:flex; flex-direction:column;
+      align-items:center; gap:13px;
+      opacity:0; pointer-events:none;
+    }
+    #auth.live { pointer-events:all; }
+
+    #pwd {
+      background:transparent; border:none;
+      border-bottom:1px solid rgba(180,205,255,.48);
+      color:rgba(235,242,255,.95);
+      font-family:'Courier New',monospace;
+      font-size:16px; letter-spacing:.18em;
+      text-align:center; width:230px; padding:9px 0;
+      outline:none; caret-color:rgba(232,238,255,.80);
+      transition:border-color .35s;
+    }
+    #pwd:focus { border-bottom-color:rgba(180,205,255,.80); }
+    #pwd::placeholder { color:rgba(180,205,255,.38); font-size:14px; }
+    #err {
+      min-height:14px; font-size:11px;
+      letter-spacing:.12em; color:rgba(255,110,100,.85);
+    }
+    #btn-enter, #btn-hint {
+      font-size:13px; letter-spacing:.38em;
+      color:rgba(190,215,255,.72); text-transform:uppercase;
+      cursor:pointer; user-select:none; transition:color .3s;
+      padding-right:.38em;
+    }
+    #btn-enter:hover, #btn-hint:hover { color:rgba(210,230,255,.95); }
+    #btn-hint { animation:blink 3s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:.35} 50%{opacity:.90} }
+
+    /* scanlines */
+    body::after {
+      content:''; position:fixed; inset:0; z-index:500; pointer-events:none;
+      background:repeating-linear-gradient(0deg,
+        transparent 0, transparent 2px,
+        rgba(0,0,0,.04) 2px, rgba(0,0,0,.04) 3px);
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="mist"></canvas>
+<div id="moon"></div>
+
+<div id="stage">
+  <div id="kir">
+    <span class="kr" id="kr1">K</span>
+    <span class="kr" id="kr2">I</span>
+    <span class="kr" id="kr3">R</span>
+    <span class="kr" id="kr4">I</span>
+    <span class="kr" id="kr5">K</span>
+    <span class="kr" id="kr6">O</span>
+  </div>
+  <div id="rule"></div>
+  <div id="kanji-wrap">
+    <span class="k-char" id="k1">霧</span>
+    <span class="k-char" id="k2">子</span>
+  </div>
+  <div id="auth">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<script>
+/* ═════════════════════════════════════════════════════════
+   MIST CANVAS — dense & thick
+   ═════════════════════════════════════════════════════════ */
+const canvas = document.getElementById('mist');
+const ctx    = canvas.getContext('2d');
+
+let W, H, CX, CY;
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  CX = W / 2; CY = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+
+/* ── Large fog blobs: many, thick ── */
+const NUM_BLOBS = 18;
+const blobs = Array.from({ length: NUM_BLOBS }, () => ({
+  x:     Math.random() * W,
+  y:     Math.random() * H,
+  r:     Math.random() * 420 + 180,
+  alpha: Math.random() * 0.038 + 0.014,
+  vx:   (Math.random() - .5) * .16,
+  vy:   (Math.random() - .5) * .09,
+  ph:   Math.random() * Math.PI * 2,
+}));
+
+/* ── Mid-layer blobs: medium, fill gaps ── */
+const NUM_MID = 12;
+const midBlobs = Array.from({ length: NUM_MID }, () => ({
+  x:     Math.random() * W,
+  y:     Math.random() * H,
+  r:     Math.random() * 180 + 70,
+  alpha: Math.random() * 0.022 + 0.010,
+  vx:   (Math.random() - .5) * .24,
+  vy:   (Math.random() - .5) * .13,
+  ph:   Math.random() * Math.PI * 2,
+}));
+
+/* ── Fine particles: dense ── */
+const NUM_P = 520;
+
+function mkParticle() {
+  const angle = Math.random() * Math.PI * 2;
+  const dist  = Math.random() * Math.min(W, H) * .52;
+  return {
+    x:    CX + Math.cos(angle) * dist,
+    y:    CY + Math.sin(angle) * dist * .75,
+    vx:   (Math.random() - .5) * .20,
+    vy:   (Math.random() - .5) * .13 - .05,
+    sz:   Math.random() * 3 + .6,
+    ba:   Math.random() * 0.10 + 0.03,
+    ph:   Math.random() * Math.PI * 2,
+    life: Math.random() * 300,
+    maxL: Math.random() * 350 + 200,
+  };
+}
+const parts = Array.from({ length: NUM_P }, mkParticle);
+
+/* ── Glinting stars ── */
+const NUM_GLINTS = 60;
+const glints = Array.from({ length: NUM_GLINTS }, () => ({
+  x:  Math.random() * W,
+  y:  Math.random() * H * .80,
+  r:  Math.random() * 1.3 + .3,
+  a:  Math.random() * 0.20 + 0.06,
+  ph: Math.random() * Math.PI * 2,
+  sp: Math.random() * .006 + .002,
+}));
+
+/* ── Global fog veil: a soft semi-transparent wash over the whole canvas ── */
+let globalAlpha = 0;
+let startTime   = null;
+
+function drawFrame(ts) {
+  if (!startTime) startTime = ts;
+  const t = ts - startTime;
+
+  globalAlpha = Math.min(1, t / 2000);
+
+  ctx.clearRect(0, 0, W, H);
+
+  /* ── Base fog veil: very subtle centre glow only ── */
+  ctx.save();
+  ctx.globalAlpha = globalAlpha * 0.06;
+  const veil = ctx.createRadialGradient(CX, CY * .7, 0, CX, CY * .7, Math.max(W, H) * .55);
+  veil.addColorStop(0,   'rgba(130,165,245,1)');
+  veil.addColorStop(.50, 'rgba(100,140,230,.40)');
+  veil.addColorStop(1,   'transparent');
+  ctx.fillStyle = veil;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  /* ── Large fog blobs ── */
+  ctx.save();
+  ctx.globalAlpha = globalAlpha;
+  blobs.forEach(b => {
+    b.x += b.vx + Math.sin(t * .00032 + b.ph) * .30;
+    b.y += b.vy + Math.cos(t * .00025 + b.ph) * .18;
+    if (b.x < -b.r) b.x = W + b.r;
+    if (b.x > W+b.r) b.x = -b.r;
+    if (b.y < -b.r) b.y = H + b.r;
+    if (b.y > H+b.r) b.y = -b.r;
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+    g.addColorStop(0,   `rgba(155,195,255,${b.alpha})`);
+    g.addColorStop(.40, `rgba(140,180,255,${b.alpha * .60})`);
+    g.addColorStop(.75, `rgba(120,165,245,${b.alpha * .25})`);
+    g.addColorStop(1,   'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+
+  /* ── Mid blobs ── */
+  ctx.save();
+  ctx.globalAlpha = globalAlpha;
+  midBlobs.forEach(b => {
+    b.x += b.vx + Math.sin(t * .00045 + b.ph) * .22;
+    b.y += b.vy + Math.cos(t * .00038 + b.ph) * .14;
+    if (b.x < -b.r) b.x = W + b.r;
+    if (b.x > W+b.r) b.x = -b.r;
+    if (b.y < -b.r) b.y = H + b.r;
+    if (b.y > H+b.r) b.y = -b.r;
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+    g.addColorStop(0,   `rgba(165,200,255,${b.alpha})`);
+    g.addColorStop(.5,  `rgba(145,185,255,${b.alpha * .50})`);
+    g.addColorStop(1,   'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+
+  /* ── Fine particles ── */
+  ctx.save();
+  parts.forEach(p => {
+    p.life += 1;
+    if (p.life > p.maxL) {
+      Object.assign(p, mkParticle());
+      p.life = 0;
+    }
+    p.x += p.vx + Math.sin(t * .00041 + p.ph) * .22;
+    p.y += p.vy + Math.cos(t * .00033 + p.ph) * .14;
+    if (p.x < -20) p.x = W + 20;
+    if (p.x > W+20) p.x = -20;
+    if (p.y < -20) p.y = H + 20;
+    if (p.y > H+20) p.y = -20;
+    const lifeRatio = p.life / p.maxL;
+    const fade = Math.sin(lifeRatio * Math.PI);
+    ctx.globalAlpha = globalAlpha * p.ba * fade;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.sz, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(185,215,255,1)';
+    ctx.fill();
+  });
+  ctx.restore();
+
+  /* ── Glints ── */
+  ctx.save();
+  glints.forEach(g => {
+    const pulse = (Math.sin(t * g.sp + g.ph) + 1) * .5;
+    ctx.globalAlpha = globalAlpha * g.a * pulse;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#ddeeff';
+    ctx.fill();
+  });
+  ctx.restore();
+
+  /* vertical blade removed — was creating unwanted cross with #rule */
+
+  requestAnimationFrame(drawFrame);
+}
+requestAnimationFrame(drawFrame);
+
+/* ═════════════════════════════════════════════════════════
+   RESPONSIVE FONT SIZES
+   ═════════════════════════════════════════════════════════ */
+const kirikoPx = Math.max(40, Math.min(82, Math.round(W / 19)));
+const kanjiPx  = Math.max(22, Math.min(46, Math.round(W / 38)));
+
+document.querySelectorAll('.kr').forEach(el => {
+  el.style.fontSize = kirikoPx + 'px';
+});
+document.querySelectorAll('.k-char').forEach(el => {
+  el.style.fontSize = kanjiPx + 'px';
+});
+
+/* ═════════════════════════════════════════════════════════
+   AUTH
+   ═════════════════════════════════════════════════════════ */
+const AUTHENTICATED = {{ 'true' if authenticated else 'false' }};
+const authEl = document.getElementById('auth');
+
+function buildAuth() {
+  if (AUTHENTICATED) {
+    authEl.innerHTML = `<div id="btn-hint">[ нажмите чтобы войти ]</div>`;
+    const go = () => { window.location.href = '/chat'; };
+    document.addEventListener('click',   go, { once: true });
+    document.addEventListener('keydown', go, { once: true });
+  } else {
+    authEl.innerHTML = `
+      <input id="pwd"       type="password" placeholder="пароль" autocomplete="off">
+      <div   id="err"></div>
+      <div   id="btn-enter">[ войти ]</div>`;
+
+    const inp = document.getElementById('pwd');
+    const btn = document.getElementById('btn-enter');
+    const err = document.getElementById('err');
+    inp.focus();
+
+    async function tryAuth() {
+      err.textContent = '';
+      try {
+        const res  = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: inp.value }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          gsap.to('#stage', { opacity: 0, duration: .4,
+            onComplete: () => { window.location.href = '/chat'; }});
+        } else {
+          err.textContent = data.error || 'неверный пароль';
+          gsap.fromTo('#err', { x:-10 }, { x:0, duration:.35, ease:'elastic.out(1,.35)' });
+          inp.value = ''; inp.focus();
+        }
+      } catch { err.textContent = 'ошибка соединения'; }
+    }
+    btn.addEventListener('click', tryAuth);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') tryAuth(); });
+  }
+}
+buildAuth();
+
+/* ═════════════════════════════════════════════════════════
+   GSAP REVEAL TIMELINE
+   KIRIKO letters (staggered) → rule → 霧子 → auth
+   ═════════════════════════════════════════════════════════ */
+const tl = gsap.timeline({ defaults: { ease: 'power2.out' } });
+
+// Per-letter mist parameters — each letter has its own blur depth & timing
+const letterCfg = [
+  { blurIn:32, blurLoop:2.8, dur:1.7, loopDur:2.6, delay:0.00, loopDelay:0.0  },  // K
+  { blurIn:22, blurLoop:4.2, dur:1.5, loopDur:3.4, delay:0.18, loopDelay:0.7  },  // I
+  { blurIn:38, blurLoop:1.8, dur:1.9, loopDur:2.0, delay:0.36, loopDelay:0.3  },  // R
+  { blurIn:18, blurLoop:5.0, dur:1.4, loopDur:4.1, delay:0.54, loopDelay:1.1  },  // I
+  { blurIn:28, blurLoop:3.2, dur:1.6, loopDur:2.8, delay:0.72, loopDelay:0.5  },  // K
+  { blurIn:42, blurLoop:2.0, dur:2.0, loopDur:3.0, delay:0.90, loopDelay:0.9  },  // O
+];
+
+tl
+  // Moon glow
+  .to('#moon', { opacity:1, duration:2.8, ease:'power1.out' }, 0.2)
+
+  // Rule line grows (early — before letters fully resolve)
+  .to('#rule', { opacity:1, width:100, duration:0.8, ease:'power2.inOut' }, 2.8)
+
+  // 霧 rises (subtitle)
+  .fromTo('#k1',
+    { opacity:0, filter:'blur(16px)', y:5 },
+    { opacity:1, filter:'blur(0px)',  y:0, duration:1.3 }, 3.3)
+
+  // 子 follows
+  .fromTo('#k2',
+    { opacity:0, filter:'blur(16px)', y:5 },
+    { opacity:1, filter:'blur(0px)',  y:0, duration:1.3 }, 3.65)
+
+  // Auth appears
+  .to('#auth', {
+    opacity:1, duration:0.9,
+    onStart() { authEl.classList.add('live'); },
+  }, 4.6)
+
+  // Perpetual breath — kanji glow
+  .to('.k-char', {
+    textShadow:'-3px 0 rgba(255,0,60,0.55), 3px 0 rgba(0,255,249,0.55), 0 0 50px rgba(180,210,255,.75), 0 0 110px rgba(160,195,255,.40)',
+    duration:3.2, yoyo:true, repeat:-1, ease:'sine.inOut',
+    stagger:{ each:.5, yoyo:true, repeat:-1 }
+  }, 5.5);
+
+// ── Each KIRIKO letter: individual reveal + perpetual mist drift ──
+const krEls = document.querySelectorAll('.kr');
+letterCfg.forEach((cfg, i) => {
+  const el = krEls[i];
+  const revealAt = 1.0 + cfg.delay;
+
+  // Reveal: emerge from mist at different blur depths
+  tl.fromTo(el,
+    { opacity:0, filter:`blur(${cfg.blurIn}px)`, y: 8 + i * 1.5 },
+    { opacity:1, filter:'blur(0px)', y:0, duration:cfg.dur, ease:'power2.out' },
+    revealAt
+  );
+
+  // After reveal: each letter independently drifts back into mist & out
+  gsap.delayedCall(revealAt + cfg.dur + cfg.loopDelay, () => {
+    gsap.to(el, {
+      filter:`blur(${cfg.blurLoop}px)`,
+      opacity: 0.72 + Math.random() * 0.18,
+      duration: cfg.loopDur,
+      yoyo:true, repeat:-1, ease:'sine.inOut',
+    });
+    // Also pulse the glow independently
+    gsap.to(el, {
+      textShadow:`-4px 0 rgba(255,0,60,0.60), 4px 0 rgba(0,255,249,0.60), 0 0 50px rgba(180,210,255,.82), 0 0 110px rgba(160,200,255,.48), 0 0 200px rgba(140,185,255,.24)`,
+      duration: cfg.loopDur * 1.3,
+      yoyo:true, repeat:-1, ease:'sine.inOut',
+    });
+  });
+});
+
+/* ═════════════════════════════════════════════════════════
+   HORROR GLITCH — perpetual burst loop on #kir container
+   3 burst types: crash-tear | screen-rip | flicker-out
+   Avg cycle ~2.2 s  |  Starts after reveal (~5 s)
+   Uses setTimeout chains — no RAF loops, no OOM risk
+   ═════════════════════════════════════════════════════════ */
+(function() {
+  const kir = document.getElementById('kir');
+  if (!kir) return;
+
+  let active = false;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function ri(a, b)  { return (rnd(a, b)) | 0; }
+
+  /* Apply inline styles to #kir; transition:none to make it instant */
+  function set(s) {
+    kir.style.transition = 'none';
+    kir.style.transform  = s.transform  || '';
+    kir.style.opacity    = s.opacity    !== undefined ? String(s.opacity) : '';
+    kir.style.filter     = s.filter     || '';
+    kir.style.clipPath   = s.clipPath   || '';
+  }
+
+  /* Restore #kir to neutral, then call done() */
+  function clear(done) {
+    kir.style.transform  = '';
+    kir.style.opacity    = '';
+    kir.style.filter     = '';
+    kir.style.clipPath   = '';
+    kir.style.transition = '';
+    active = false;
+    done();
+  }
+
+  /* ── crash-tear ──────────────────────────────────────────
+     Word rips hard left then snaps through 3 recovery frames.
+     Opacity collapses to 0.04 on first frame (near invisible).
+     ───────────────────────────────────────────────────────── */
+  function crashTear(done) {
+    function art(dx) {
+      return `drop-shadow(${-dx}px 0 rgba(255,0,60,.96)) drop-shadow(${dx}px 0 rgba(0,255,249,.96))`;
+    }
+    const seq = [
+      { transform:`translate(-22px,${ri(-3,4)}px) skewX(-22deg)`, opacity:.04,  filter:art(22), clipPath:`inset(0 0 ${ri(60,80)}% 0)` },
+      { transform:`translate(20px,${ri(-2,3)}px)  skewX(15deg)`,  opacity:.82,  filter:art(14), clipPath:`inset(${ri(15,28)}% 0 ${ri(42,58)}% 0)` },
+      { transform:`translate(-12px,1px) skewX(-7deg)`,             opacity:.55,  filter:art(8),  clipPath:`inset(${ri(40,55)}% 0 ${ri(18,32)}% 0)` },
+      { transform:`translate(6px,0)     skewX(3deg)`,              opacity:.90,  filter:art(4),  clipPath:'none' },
+    ];
+    let i = 0;
+    (function step() {
+      if (i >= seq.length) { clear(done); return; }
+      set(seq[i++]);
+      setTimeout(step, ri(28, 58));
+    })();
+  }
+
+  /* ── screen-rip ──────────────────────────────────────────
+     5 horizontal slices fly at independent X / skew offsets
+     — simulates a CRT horizontal sync failure.
+     ───────────────────────────────────────────────────────── */
+  function screenRip(done) {
+    const art = 'drop-shadow(-20px 0 rgba(255,0,60,.92)) drop-shadow(20px 0 rgba(0,255,249,.92))';
+    const slices = [
+      { clipPath:'inset(0 0 82% 0)',    transform:`translate(${ri(-20,20)}px,0) skewX(${ri(-6,6)}deg)` },
+      { clipPath:'inset(18% 0 65% 0)', transform:`translate(${ri(-22,22)}px,0) skewX(${ri(-9,9)}deg)` },
+      { clipPath:'inset(36% 0 47% 0)', transform:`translate(${ri(-16,16)}px,0) skewX(${ri(-5,5)}deg)` },
+      { clipPath:'inset(53% 0 31% 0)', transform:`translate(${ri(-18,18)}px,0) skewX(${ri(-7,7)}deg)` },
+      { clipPath:'inset(70% 0 13% 0)', transform:`translate(${ri(-12,12)}px,0) skewX(${ri(-4,4)}deg)` },
+    ];
+    let i = 0;
+    (function step() {
+      if (i >= slices.length) { clear(done); return; }
+      const s = slices[i++];
+      set({ transform: s.transform, clipPath: s.clipPath, opacity: rnd(.06, .88), filter: art });
+      setTimeout(step, ri(22, 52));
+    })();
+  }
+
+  /* ── flicker-out ─────────────────────────────────────────
+     Rapid alternating near-invisible / bright flashes with
+     random skew & offset — like a dying fluorescent tube.
+     ───────────────────────────────────────────────────────── */
+  function flickerOut(done) {
+    const ticks = ri(6, 11);
+    let i = 0;
+    (function step() {
+      if (i >= ticks) { clear(done); return; }
+      const even = (i & 1) === 0;
+      const dx   = ri(-22, 22);
+      set({
+        transform: `translate(${ri(-8,8)}px,${ri(-3,3)}px) skewX(${ri(-12,12)}deg)`,
+        opacity:   even ? rnd(.04, .12) : rnd(.78, 1.0),
+        filter:    `drop-shadow(${dx}px 0 rgba(255,0,60,${rnd(.65,1).toFixed(2)})) ` +
+                   `drop-shadow(${-dx}px 0 rgba(0,255,249,${rnd(.65,1).toFixed(2)}))`,
+        clipPath:  (i === 0) ? `inset(${ri(20,44)}% 0 ${ri(20,44)}% 0)` : 'none',
+      });
+      i++;
+      setTimeout(step, ri(35, 75));
+    })();
+  }
+
+  const BURSTS = [crashTear, screenRip, flickerOut];
+
+  function loop() {
+    if (active) return;
+    active = true;
+    BURSTS[ri(0, BURSTS.length)](() => {
+      /* Next burst: 1 400 – 3 000 ms delay → avg ~2 200 ms cycle */
+      setTimeout(loop, ri(1400, 3000));
+    });
+  }
+
+  /* Wait for GSAP reveal to finish before first burst (~5 s) */
+  setTimeout(loop, 5000);
+})();
+</script>
+</body>
+</html>

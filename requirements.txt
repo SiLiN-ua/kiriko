@@ -1,0 +1,12 @@
+flask
+flask-cors
+anthropic
+requests
+beautifulsoup4
+python-dotenv
+telethon
+asyncio
+aiohttp
+pymupdf
+python-docx
+olefile
