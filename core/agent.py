@@ -3,6 +3,8 @@ Kiriko — Claude API agent with agentic tool-use loop.
 """
 import os
 import json
+import time
+import anthropic
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
@@ -647,6 +649,40 @@ def _serialize_content(content_blocks):
     return out
 
 
+_TOOL_RESULT_MAX = 40_000   # chars per tool_result block
+_MAX_TURNS       = 20       # max user+assistant pairs to keep
+
+def _trim_messages(msgs: list) -> list:
+    """
+    1. Truncate oversized tool_result content blocks.
+    2. If still too many turns — keep only the first message (file upload context)
+       + last _MAX_TURNS pairs.
+    """
+    # Step 1: trim fat tool_result blocks
+    trimmed = []
+    for m in msgs:
+        if m.get('role') != 'user' or not isinstance(m.get('content'), list):
+            trimmed.append(m)
+            continue
+        new_content = []
+        for block in m['content']:
+            if isinstance(block, dict) and block.get('type') == 'tool_result':
+                c = block.get('content', '')
+                if isinstance(c, str) and len(c) > _TOOL_RESULT_MAX:
+                    block = {**block, 'content': c[:_TOOL_RESULT_MAX] + '\n[...скорочено...]'}
+            new_content.append(block)
+        trimmed.append({**m, 'content': new_content})
+
+    # Step 2: trim old turns if conversation is too long
+    # Separate first user message (file/context) from the rest
+    if len(trimmed) > _MAX_TURNS * 2 + 1:
+        head = trimmed[:1]   # keep first message (file upload context)
+        tail = trimmed[-((_MAX_TURNS * 2)):]
+        trimmed = head + tail
+
+    return trimmed
+
+
 def run_agent_stream(messages: list):
     """
     Generator — yields JSON-encoded event strings for SSE.
@@ -660,17 +696,27 @@ def run_agent_stream(messages: list):
       {'type': 'error',      'text': str}           — something went wrong
     """
     client = _get_client()
-    current_messages = list(messages)
+    current_messages = _trim_messages(list(messages))
 
     while True:
-        with client.messages.stream(
-            model=MODEL,
-            max_tokens=8096,
-            system=SYSTEM_PROMPT,
-            tools=TOOL_DEFINITIONS,
-            messages=current_messages,
-        ) as stream:
-            response = stream.get_final_message()
+        # Retry loop for Anthropic rate-limit errors (max 3 attempts)
+        for _attempt in range(3):
+            try:
+                with client.messages.stream(
+                    model=MODEL,
+                    max_tokens=8096,
+                    system=SYSTEM_PROMPT,
+                    tools=TOOL_DEFINITIONS,
+                    messages=current_messages,
+                ) as stream:
+                    response = stream.get_final_message()
+                break
+            except anthropic.RateLimitError as exc:
+                if _attempt == 2:
+                    raise
+                retry_after = int(exc.response.headers.get('retry-after', 20))
+                yield json.dumps({'type': 'text', 'text': f'\n⏳ Anthropic rate limit — повтор через {retry_after}с...\n'})
+                time.sleep(retry_after)
 
         # ── Tool-use turn ─────────────────────────────────────────────────────
         if response.stop_reason == 'tool_use':

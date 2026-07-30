@@ -6,10 +6,12 @@ import io
 import re
 import json
 import uuid
+import time
 import hashlib
 import asyncio
 import threading
 import functools
+from collections import deque
 from datetime import datetime
 from flask import (Flask, render_template, request, redirect,
                    url_for, session, Response, jsonify, send_file)
@@ -100,6 +102,44 @@ PASSWORD = os.getenv('APP_PASSWORD', '')
 app.secret_key = hashlib.sha256(f'kiriko-{PASSWORD}'.encode()).digest()
 
 
+# ── Rate limiter (per session, sliding window) ────────────────────────────────
+# Limits: 5 requests per minute, 20 per hour per session
+
+_rl_lock   = threading.Lock()
+_rl_store  = {}   # session_id → {'min': deque, 'hour': deque}
+
+RATE_PER_MIN  = int(os.getenv('RATE_PER_MIN',  '5'))
+RATE_PER_HOUR = int(os.getenv('RATE_PER_HOUR', '20'))
+
+def _check_rate_limit(sid: str):
+    """
+    Returns (allowed: bool, reason: str).
+    Sliding window: prune timestamps older than the window, then count.
+    """
+    now = time.monotonic()
+    with _rl_lock:
+        if sid not in _rl_store:
+            _rl_store[sid] = {'min': deque(), 'hour': deque()}
+        buckets = _rl_store[sid]
+
+        # Prune expired
+        while buckets['min']  and now - buckets['min'][0]  > 60:
+            buckets['min'].popleft()
+        while buckets['hour'] and now - buckets['hour'][0] > 3600:
+            buckets['hour'].popleft()
+
+        if len(buckets['min']) >= RATE_PER_MIN:
+            wait = int(60 - (now - buckets['min'][0])) + 1
+            return False, f'Забагато запитів — зачекайте {wait} с (ліміт {RATE_PER_MIN}/хв)'
+        if len(buckets['hour']) >= RATE_PER_HOUR:
+            wait = int(3600 - (now - buckets['hour'][0])) // 60 + 1
+            return False, f'Годинний ліміт вичерпано — зачекайте ~{wait} хв ({RATE_PER_HOUR}/год)'
+
+        buckets['min'].append(now)
+        buckets['hour'].append(now)
+        return True, ''
+
+
 # ── Auth helper ───────────────────────────────────────────────────────────────
 
 def require_auth(f):
@@ -154,6 +194,11 @@ def api_chat():
     session_id = data.get('session_id', '')
     if not messages:
         return jsonify({'error': 'No messages'}), 400
+
+    sid = session.get('_id') or request.remote_addr or 'default'
+    allowed, reason = _check_rate_limit(sid)
+    if not allowed:
+        return jsonify({'error': reason}), 429
 
     def generate():
         try:
@@ -242,26 +287,18 @@ def api_upload():
     # ── DOCX / DOC ────────────────────────────────────────────────────────────
     if ext in ('.docx', '.doc'):
         if ext == '.doc':
-            # Extract text from .doc via olefile (pure Python, no system deps)
             try:
-                import olefile, re
-                extracted = []
-                with olefile.OleFileIO(io.BytesIO(data)) as ole:
-                    for stream_name in [['WordDocument'], ['1Table'], ['0Table']]:
-                        if ole.exists(stream_name):
-                            raw = ole.openstream(stream_name).read()
-                            # Decode as UTF-16LE (Word's native encoding)
-                            chunk = raw.decode('utf-16-le', errors='ignore')
-                            # Keep Cyrillic, Latin, digits, punctuation
-                            lines = re.findall(r'[А-ЯҐЄІЇа-яґєії\w\s\.,;:\-\(\)@\+\/\\\"\'\!\_]{3,}', chunk)
-                            extracted.extend(lines)
-                text = '\n'.join(dict.fromkeys(extracted)).strip()  # deduplicate preserving order
+                import subprocess, tempfile
+                with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as tmp:
+                    tmp.write(data)
+                    tmp_path = tmp.name
+                result = subprocess.run(['antiword', tmp_path], capture_output=True, timeout=30)
+                os.unlink(tmp_path)
+                text = result.stdout.decode('utf-8', errors='ignore').strip()
                 if not text:
                     text = '[DOC: не вдалося витягти текст]'
                 blocks = [{'type': 'text', 'text': f'[Файл: {name}]\n{text}'}]
                 return jsonify({'blocks': blocks})
-            except ImportError:
-                return jsonify({'error': 'Для читання .doc файлів виконайте: pip install olefile'}), 415
             except Exception as e:
                 return jsonify({'error': f'Помилка читання .doc: {e}'}), 500
         try:
