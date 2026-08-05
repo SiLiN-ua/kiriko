@@ -597,5 +597,18 @@ letterCfg.forEach((cfg, i) => {
   setTimeout(loop, 5000);
 })();
 </script>
+
+<script>
+/* Heartbeat — keeps server alive while tab is open */
+(function() {
+  function ping() {
+    if (document.visibilityState === 'visible') {
+      fetch('/api/heartbeat', {method: 'POST', keepalive: true}).catch(() => {});
+    }
+  }
+  ping();
+  setInterval(ping, 15000);
+})();
+</script>
 </body>
 </html>

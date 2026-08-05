@@ -7,16 +7,25 @@ import re
 import json
 import uuid
 import time
+import hmac
+import base64
 import hashlib
+import secrets
 import asyncio
+import tempfile
 import threading
 import functools
+import subprocess
 from collections import deque
 from datetime import datetime
 from flask import (Flask, render_template, request, redirect,
                    url_for, session, Response, jsonify, send_file)
 from flask_cors import CORS
 from dotenv import load_dotenv
+
+# Optional deps loaded once (fail fast if missing)
+import pymupdf
+from docx import Document as DocxDoc
 
 # Ensure the main thread always has an event loop (needed for tools.py
 # which calls asyncio.get_event_loop().run_until_complete() for Telegram bots).
@@ -30,7 +39,12 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 from core.agent import run_agent_stream
 
 app = Flask(__name__)
-CORS(app)
+# Restrict CORS to local origins only (prevents CSRF from arbitrary sites)
+CORS(app, origins=[
+    'http://127.0.0.1:5099',
+    'http://localhost:5099',
+    'https://kiriko.tetrao.website',
+], supports_credentials=True)
 
 # ── History storage ───────────────────────────────────────────────────────────
 
@@ -53,9 +67,15 @@ def _load_history():
         return []
 
 def _save_history(history):
+    """Atomic write via temp file + rename — survives crashes/kills mid-write."""
     _ensure_data()
-    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+    history = history[:300]   # hard cap regardless of caller
+    tmp = HISTORY_FILE + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, HISTORY_FILE)
 
 def _upsert_conversation(session_id, msgs):
     """Save or update a conversation keyed by session_id."""
@@ -102,6 +122,36 @@ PASSWORD = os.getenv('APP_PASSWORD', '')
 app.secret_key = hashlib.sha256(f'kiriko-{PASSWORD}'.encode()).digest()
 
 
+# ── Idle auto-shutdown (kills Flask when no tabs open) ────────────────────────
+# Client pings /api/heartbeat every 15s while a tab is visible.
+# If no heartbeat for IDLE_TIMEOUT seconds → os._exit(0), releasing memory.
+
+IDLE_TIMEOUT = int(os.getenv('IDLE_TIMEOUT', '60'))
+_last_heartbeat = [time.monotonic()]
+_shutdown_enabled = [False]   # flip to True after first heartbeat received
+
+@app.route('/api/heartbeat', methods=['POST'])
+def api_heartbeat():
+    _last_heartbeat[0] = time.monotonic()
+    _shutdown_enabled[0] = True
+    return jsonify({'ok': True})
+
+def _idle_watchdog():
+    tick = 0
+    while True:
+        time.sleep(10)
+        tick += 1
+        # Every 5 minutes prune rate-limit store
+        if tick % 30 == 0:
+            _rl_prune()
+        if not _shutdown_enabled[0]:
+            continue
+        if time.monotonic() - _last_heartbeat[0] > IDLE_TIMEOUT:
+            os._exit(0)
+
+threading.Thread(target=_idle_watchdog, daemon=True).start()
+
+
 # ── Rate limiter (per session, sliding window) ────────────────────────────────
 # Limits: 5 requests per minute, 20 per hour per session
 
@@ -140,6 +190,16 @@ def _check_rate_limit(sid: str):
         return True, ''
 
 
+def _rl_prune():
+    """Drop rate-limit entries with no recent activity (prevents unbounded growth)."""
+    now = time.monotonic()
+    with _rl_lock:
+        stale = [sid for sid, b in _rl_store.items()
+                 if not b['hour'] or now - b['hour'][-1] > 3600]
+        for sid in stale:
+            _rl_store.pop(sid, None)
+
+
 # ── Auth helper ───────────────────────────────────────────────────────────────
 
 def require_auth(f):
@@ -167,8 +227,12 @@ def splash():
 @app.route('/api/auth', methods=['POST'])
 def auth():
     data = request.get_json(silent=True) or {}
-    if data.get('password', '') == PASSWORD:
+    submitted = (data.get('password', '') or '').encode('utf-8')
+    expected  = (PASSWORD or '').encode('utf-8')
+    # Constant-time comparison prevents timing attacks
+    if PASSWORD and hmac.compare_digest(submitted, expected):
         session['authenticated'] = True
+        session['sid'] = secrets.token_hex(16)   # unique per browser, used for rate-limit
         session.permanent = True
         return jsonify({'ok': True})
     return jsonify({'ok': False, 'error': 'Неверный пароль'}), 401
@@ -195,7 +259,7 @@ def api_chat():
     if not messages:
         return jsonify({'error': 'No messages'}), 400
 
-    sid = session.get('_id') or request.remote_addr or 'default'
+    sid = session.get('sid') or request.remote_addr or 'default'
     allowed, reason = _check_rate_limit(sid)
     if not allowed:
         return jsonify({'error': reason}), 429
@@ -287,13 +351,12 @@ def api_upload():
     # ── DOCX / DOC ────────────────────────────────────────────────────────────
     if ext in ('.docx', '.doc'):
         if ext == '.doc':
+            tmp_path = None
             try:
-                import subprocess, tempfile
                 with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as tmp:
                     tmp.write(data)
                     tmp_path = tmp.name
                 result = subprocess.run(['antiword', tmp_path], capture_output=True, timeout=30)
-                os.unlink(tmp_path)
                 text = result.stdout.decode('utf-8', errors='ignore').strip()
                 if not text:
                     text = '[DOC: не вдалося витягти текст]'
@@ -301,8 +364,11 @@ def api_upload():
                 return jsonify({'blocks': blocks})
             except Exception as e:
                 return jsonify({'error': f'Помилка читання .doc: {e}'}), 500
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try: os.unlink(tmp_path)
+                    except OSError: pass
         try:
-            from docx import Document as DocxDoc
             doc  = DocxDoc(io.BytesIO(data))
             parts = []
             for p in doc.paragraphs:
@@ -322,20 +388,24 @@ def api_upload():
     # ── PDF ───────────────────────────────────────────────────────────────────
     if ext == '.pdf':
         try:
-            import pymupdf
             doc  = pymupdf.open(stream=data, filetype='pdf')
             text = ''.join(page.get_text() for page in doc).strip()
 
             # Text PDF — send extracted text
             if len(text) > 150:
-                # Limit to ~12000 chars to stay within token budget
-                if len(text) > 12000:
-                    text = text[:12000] + '\n[...текст скорочено...]'
+                # Smart-truncate at ~12000 chars: cut at last paragraph/sentence break
+                LIMIT = 12000
+                if len(text) > LIMIT:
+                    slice_ = text[:LIMIT]
+                    # Prefer newline; fall back to sentence end; else hard cut
+                    cut = max(slice_.rfind('\n\n'), slice_.rfind('\n'), slice_.rfind('. '))
+                    if cut < LIMIT // 2:   # too early — hard cut
+                        cut = LIMIT
+                    text = text[:cut].rstrip() + '\n[...текст скорочено...]'
                 blocks = [{'type': 'text', 'text': f'[Файл: {name}]\n{text}'}]
                 return jsonify({'blocks': blocks})
 
             # Scanned PDF — render pages as images (max 10 pages)
-            import base64
             blocks = [{'type': 'text', 'text': f'[Файл: {name} — скан, сторінок: {len(doc)})'}]
             for i, page in enumerate(doc):
                 if i >= 10:
@@ -362,7 +432,6 @@ def api_upload():
         '.webp': 'image/webp',
     }
     if ext in mime_map:
-        import base64
         b64 = base64.b64encode(data).decode()
         blocks = [{
             'type': 'image',
@@ -563,7 +632,7 @@ def api_export_docx():
 if __name__ == '__main__':
     app.run(
         host='127.0.0.1',
-        port=5001,
+        port=5099,
         debug=False,
         threaded=True,    # multiple Flask threads — safe: asyncio in dedicated _tg_loop thread
         use_reloader=False,

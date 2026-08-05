@@ -3159,5 +3159,18 @@ userInput.focus();
 })();
 
 </script>
+
+<script>
+/* Heartbeat — keeps server alive while tab is open; server auto-shuts after 60s idle */
+(function() {
+  function ping() {
+    if (document.visibilityState === 'visible') {
+      fetch('/api/heartbeat', {method: 'POST', keepalive: true}).catch(() => {});
+    }
+  }
+  ping();
+  setInterval(ping, 15000);
+})();
+</script>
 </body>
 </html>
